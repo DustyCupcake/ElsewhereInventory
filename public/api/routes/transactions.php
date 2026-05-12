@@ -164,6 +164,56 @@ function handle_used(): void {
     json_ok(['success' => true]);
 }
 
+function handle_fill_confirm(): void {
+    require_method('POST');
+    $user = require_auth();
+    verify_csrf();
+
+    $b        = body();
+    $item_qrs = $b['item_qrs'] ?? [];
+    $flagged  = !empty($b['flagged']);
+    $notes    = isset($b['notes']) ? trim((string)$b['notes']) : null;
+
+    if (empty($item_qrs) || !is_array($item_qrs)) {
+        json_error('item_qrs required');
+    }
+
+    $type = $flagged ? 'fill_flagged' : 'fill_confirmed';
+    $now  = date('Y-m-d H:i:s');
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        foreach ($item_qrs as $qr) {
+            $qr   = (string)$qr;
+            $stmt = $pdo->prepare(
+                'SELECT i.id, i.status, i.current_barrio_id, t.secure_qr
+                 FROM equipment_items i
+                 JOIN equipment_types t ON t.id = i.equipment_type_id
+                 WHERE i.qr_code = ?'
+            );
+            $stmt->execute([$qr]);
+            $item = $stmt->fetch();
+
+            if (!$item || !$item['secure_qr'] || $item['status'] !== 'used') {
+                continue;
+            }
+
+            $pdo->prepare(
+                'INSERT INTO transactions (type, item_id, barrio_id, performed_by, user_name_cache, occurred_at, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$type, $item['id'], $item['current_barrio_id'], $user['id'], $user['display_name'], $now, $notes ?: null]);
+        }
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        json_error('Database error: ' . $e->getMessage(), 500);
+    }
+
+    json_ok(['success' => true, 'confirmed' => count($item_qrs), 'flagged' => $flagged]);
+}
+
 function handle_activate(): void {
     require_method('POST');
     $user = require_staff_or_admin();

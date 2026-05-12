@@ -38,18 +38,26 @@ function handle_qr_sheet(): void {
     $count = count($items);
     $cards = '';
 
+    // Build base URL from current request so QR codes work on any host/port.
+    $scheme   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $base_url = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+
     foreach ($items as $item) {
+        // The QR image encodes a direct URL; the code label still shows the short code.
+        $qr_url   = $base_url . ($item['secure_qr']
+            ? '/voucher?qr=' . rawurlencode($item['qr_code'])
+            : '/item?qr='    . rawurlencode($item['qr_code']));
         $qr_value = htmlspecialchars($item['qr_code'], ENT_QUOTES, 'UTF-8');
         $name_esc = htmlspecialchars($item['display_name'], ENT_QUOTES, 'UTF-8');
 
         if ($use_lib) {
             ob_start();
-            QRcode::png($item['qr_code'], false, QR_ECLEVEL_M, 6, 2);
+            QRcode::png($qr_url, false, QR_ECLEVEL_M, 6, 2);
             $png = ob_get_clean();
             $src = 'data:image/png;base64,' . base64_encode($png);
         } else {
             // Requires internet access at print time
-            $src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . urlencode($item['qr_code']);
+            $src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . urlencode($qr_url);
         }
 
         $img = '<img src="' . $src . '" alt="QR ' . $qr_value . '" width="160" height="160">';

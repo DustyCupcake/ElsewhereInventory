@@ -15,6 +15,7 @@ header {
 }
 .logo { font-size: 18px; }
 .logo span { color: var(--accent); }
+.header-controls { display: flex; align-items: center; gap: 10px; }
 .user-info { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
 .logout-btn {
   font-family: 'Georgia', serif;
@@ -506,3 +507,62 @@ main { padding: 1.25rem; max-width: 520px; margin: 0 auto; }
   padding: 4px 8px;
 }
 .btn-text-link:hover { color: var(--text2); }
+
+/* ── Validate batch view ────────────────────────────────────────────────── */
+.vl-resume-notice {
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  margin-bottom: .75rem;
+  text-align: center;
+}
+.vl-batch-list {
+  margin-bottom: .75rem;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.vl-batch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .5rem;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 0.5px solid var(--border);
+}
+.vl-batch-row:last-child { border-bottom: none; }
+.vl-batch-name { color: var(--text); font-weight: 500; }
+.vl-batch-barrio { color: var(--text3); font-size: 12px; white-space: nowrap; }
+.vl-batch-actions { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; }
+.vl-batch-actions .btn { margin-top: 0; }
+.vl-batch-peek {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: .75rem;
+  padding: 6px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text2);
+}
+.vl-flag-notes-wrap { margin-top: .75rem; }
+.vl-flag-notes-wrap label { margin-bottom: .35rem; }
+.vl-flag-notes-wrap textarea {
+  width: 100%;
+  padding: 9px 12px;
+  font-family: 'Georgia', serif;
+  font-size: 13px;
+  border: 0.5px solid var(--border-med);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: .5rem;
+}
+.vl-flag-notes-actions { display: flex; gap: .5rem; }
+.vl-flag-notes-actions .btn { margin-top: 0; flex: 1; }

@@ -102,6 +102,18 @@ export class Scanner {
   _emit(value) {
     if (!value || !this._active) return;
     this.stop();
-    this._onDetected(value);
+    // If the QR encodes a URL (e.g. https://example.com/voucher?qr=ABC12),
+    // extract just the qr= parameter so all downstream handlers receive a
+    // plain code regardless of whether old or URL-format QRs are used.
+    this._onDetected(_extractQrParam(value) ?? value);
+  }
+}
+
+function _extractQrParam(raw) {
+  if (!raw.startsWith('http')) return null;
+  try {
+    return new URL(raw).searchParams.get('qr');
+  } catch {
+    return null;
   }
 }

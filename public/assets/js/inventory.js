@@ -4,19 +4,23 @@
 
 import { get } from './api.js?v=1.0.1';
 import { toast } from './app.js?v=1.0.1';
+import { t } from './i18n.js?v=1.0.0';
+
+const __ = (key) => t('inventory', key);
+const _c = (key) => t('common', key);
 
 export async function init(container) {
   container.innerHTML = `
     <div class="stats" id="inv-stats">
-      <div class="stat-card"><div class="stat-label">Available</div><div class="stat-val" id="inv-avail">—</div></div>
-      <div class="stat-card"><div class="stat-label">Checked out</div><div class="stat-val" id="inv-out">—</div></div>
+      <div class="stat-card"><div class="stat-label" id="inv-lbl-avail">${__('colStatus')}</div><div class="stat-val" id="inv-avail">—</div></div>
+      <div class="stat-card"><div class="stat-label" id="inv-lbl-out">${_c('statusCheckedOut')}</div><div class="stat-val" id="inv-out">—</div></div>
     </div>
     <div class="section-actions">
-      <div style="font-size:13px;color:var(--text2)" id="inv-title">Inventory</div>
-      <button class="btn sm" onclick="window._inv.refresh()">Refresh</button>
+      <div style="font-size:13px;color:var(--text2)" id="inv-title">${__('title')}</div>
+      <button class="btn sm" onclick="window._inv.refresh()">${_c('refresh')}</button>
     </div>
     <div class="card" style="padding:0;overflow:hidden">
-      <div id="inv-body"><div class="empty">Tap refresh to load</div></div>
+      <div id="inv-body"><div class="empty">${__('emptyHint')}</div></div>
     </div>
   `;
   window._inv = { refresh: load };
@@ -26,6 +30,14 @@ export async function init(container) {
 async function load() {
   const body = document.getElementById('inv-body');
   if (body) body.innerHTML = '<div class="empty"><span class="spinner"></span> Loading…</div>';
+
+  // Refresh stat card labels (in case language changed since init)
+  const lblAvail = document.getElementById('inv-lbl-avail');
+  const lblOut   = document.getElementById('inv-lbl-out');
+  const title    = document.getElementById('inv-title');
+  if (lblAvail) lblAvail.textContent = _c('statusAvailable');
+  if (lblOut)   lblOut.textContent   = _c('statusCheckedOut');
+  if (title)    title.textContent    = __('title');
 
   try {
     const data  = await get('/inventory');
@@ -39,7 +51,7 @@ async function load() {
 
     if (!body) return;
     if (!items.length) {
-      body.innerHTML = '<div class="empty">No items in inventory</div>';
+      body.innerHTML = `<div class="empty">${__('empty')}</div>`;
       return;
     }
 
@@ -47,9 +59,9 @@ async function load() {
       <table class="inv-table">
         <thead>
           <tr>
-            <th>Item</th>
-            <th>Status</th>
-            <th>Barrio</th>
+            <th>${__('colItem')}</th>
+            <th>${__('colStatus')}</th>
+            <th>${__('colBarrio')}</th>
           </tr>
         </thead>
         <tbody>
@@ -61,8 +73,8 @@ async function load() {
               </td>
               <td>
                 ${it.status === 'available'
-                  ? '<span class="pill available"><span class="dot g"></span>Available</span>'
-                  : '<span class="pill out"><span class="dot a"></span>Out</span>'
+                  ? `<span class="pill available"><span class="dot g"></span>${_c('statusAvailable')}</span>`
+                  : `<span class="pill out"><span class="dot a"></span>${_c('statusOut')}</span>`
                 }
               </td>
               <td style="color:var(--text2);font-size:13px">${it.current_barrio ?? '—'}</td>
@@ -72,7 +84,7 @@ async function load() {
       </table>
     `;
   } catch (e) {
-    if (body) body.innerHTML = '<div class="empty">Failed to load — check connection</div>';
+    if (body) body.innerHTML = `<div class="empty">${__('failed')}</div>`;
     toast('Inventory error: ' + e.message);
   }
 }

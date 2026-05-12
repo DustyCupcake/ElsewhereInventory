@@ -3,7 +3,7 @@
  * Handles session check, tab routing, and toast notifications.
  */
 
-import { get, setCsrf } from './api.js?v=1.0.1';
+import { get, post, setCsrf } from './api.js?v=1.0.1';
 import { initOfflineSync } from './offline.js?v=1.0.0';
 import { init as initCheckout } from './checkout.js?v=1.0.1';
 import { init as initCheckin, destroy as destroyCheckin } from './checkin.js?v=1.0.2';
@@ -11,13 +11,18 @@ import { init as initBarrios, destroy as destroyBarrios } from './barrios.js?v=1
 import { init as initInventory } from './inventory.js?v=1.0.0';
 import { init as initHistory } from './history.js?v=1.0.0';
 import { init as initValidate, destroy as destroyValidate } from './validate.js?v=1.0.1';
+import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.0';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js?v=1.0.0').catch(() => {});
 }
 
+// Initialise language as early as possible (before DOM renders)
+initLang();
+
 let currentTab     = null;
 let toastTimer     = null;
+let _currentUser   = null;
 
 export function toast(msg, duration = 3000) {
   const el = document.getElementById('toast');
@@ -29,6 +34,20 @@ export function toast(msg, duration = 3000) {
 }
 
 async function boot() {
+  // Apply translations to static HTML (nav labels, etc.) immediately
+  applyTranslations();
+  renderSwitcher(document.getElementById('lang-switcher'));
+
+  // When language changes: re-apply static strings, re-render current tab,
+  // and persist the preference to the server (fire-and-forget).
+  onLangChange(() => {
+    applyTranslations();
+    rerenderCurrentTab();
+    if (_currentUser) {
+      post('/auth/language', { lang: getLang() }).catch(() => {});
+    }
+  });
+
   // Verify session; redirect to login if expired
   let user;
   try {
@@ -47,6 +66,11 @@ async function boot() {
       return;
     }
   }
+
+  _currentUser = user;
+
+  // Apply user's stored language preference (overrides browser/localStorage if different)
+  if (user.language) setLang(user.language);
 
   // Show user info in header
   const userEl = document.getElementById('header-user');
@@ -94,7 +118,32 @@ function bootValidator() {
   const panel = document.getElementById('tab-validate');
   if (panel) {
     panel.style.display = '';
+    currentTab = 'validate';
     initValidate(panel, true);
+  }
+}
+
+/**
+ * Re-initialise the currently active tab after a language change.
+ * Destroys any stateful scanner/overlay, then re-inits the panel.
+ */
+function rerenderCurrentTab() {
+  if (!currentTab) return;
+  // Destroy state for modules that have a destroy function
+  if (currentTab === 'checkin')  destroyCheckin();
+  if (currentTab === 'barrios')  destroyBarrios();
+  if (currentTab === 'validate') destroyValidate();
+
+  const panel = document.getElementById('tab-' + currentTab);
+  if (!panel) return;
+
+  switch (currentTab) {
+    case 'checkout':  initCheckout(panel, null);  break;
+    case 'checkin':   initCheckin(panel);          break;
+    case 'barrios':   initBarrios(panel, null);    break;
+    case 'inventory': initInventory(panel);        break;
+    case 'history':   initHistory(panel);          break;
+    case 'validate':  initValidate(panel, true);   break;
   }
 }
 

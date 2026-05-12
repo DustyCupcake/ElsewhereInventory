@@ -8,6 +8,10 @@ import { toast } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
 import { init as initValidate, destroy as destroyValidate } from './validate.js?v=1.0.1';
 import { init as initActivate, destroy as destroyActivate } from './activate.js?v=1.0.0';
+import { t } from './i18n.js?v=1.0.0';
+
+const __ = (key) => t('checkin', key);
+const _c = (key) => t('common', key);
 
 let scanner      = null;
 let lastItem     = null;
@@ -29,9 +33,9 @@ function render(container) {
   const toggleHTML = `
     <div class="mode-toggle-wrap">
       <div class="mode-toggle">
-        <button ${mode === 'return'   ? 'class="active"' : ''} onclick="window._ci.setMode('return')">Return equipment</button>
-        <button ${mode === 'validate' ? 'class="active"' : ''} onclick="window._ci.setMode('validate')">Validate voucher</button>
-        <button ${mode === 'activate' ? 'class="active"' : ''} onclick="window._ci.setMode('activate')">Activate vouchers</button>
+        <button ${mode === 'return'   ? 'class="active"' : ''} onclick="window._ci.setMode('return')">${__('modeReturn')}</button>
+        <button ${mode === 'validate' ? 'class="active"' : ''} onclick="window._ci.setMode('validate')">${__('modeVoucher')}</button>
+        <button ${mode === 'activate' ? 'class="active"' : ''} onclick="window._ci.setMode('activate')">${__('modeActivate')}</button>
       </div>
     </div>
   `;
@@ -63,7 +67,7 @@ function render(container) {
         <video id="ci-video" playsinline muted></video>
         <div class="scan-overlay"><div class="scan-frame"><div class="scan-line"></div></div></div>
       </div>
-      <div class="scan-status" id="ci-status">Aim camera at item QR code…</div>
+      <div class="scan-status" id="ci-status">${_c('aimCamera')}</div>
     </div>
   `;
 
@@ -86,13 +90,13 @@ async function startScanner(container) {
     await scanner.start();
   } catch (e) {
     const stat = document.getElementById('ci-status');
-    if (stat) stat.textContent = 'Camera error — ' + e.message;
+    if (stat) stat.textContent = _c('cameraError');
   }
 }
 
 async function handleScan(qr, container) {
   const stat = document.getElementById('ci-status');
-  if (stat) stat.textContent = 'Looking up…';
+  if (stat) stat.textContent = _c('lookingUp');
 
   const doReset = () => {
     scanOverlay.hide();
@@ -123,9 +127,9 @@ async function handleScan(qr, container) {
       scanOverlay.show({
         state: 'warning',
         title: item.name,
-        subtitle: 'Already returned — no action needed',
+        subtitle: __('alreadyReturned'),
         buttons: [
-          { label: 'OK', action: doReset },
+          { label: _c('ok'), action: doReset },
         ],
       });
     } else {
@@ -134,15 +138,15 @@ async function handleScan(qr, container) {
         title: item.name,
         subtitle: item.current_barrio?.name ? `Checked out to ${item.current_barrio.name}` : item.category ?? null,
         buttons: [
-          { label: 'Confirm Return', action: doConfirmReturn },
-          { label: 'Undo', action: doReset },
+          { label: __('confirmReturn'), action: doConfirmReturn },
+          { label: _c('undo'),          action: doReset },
         ],
       });
     }
   } catch (e) {
     const doManual = () => {
       scanOverlay.showManualEntry({
-        placeholder: 'Type item QR code',
+        placeholder: _c('enterManually'),
         onSubmit: (typed) => handleScan(typed, container),
         onCancel: doReset,
       });
@@ -151,11 +155,11 @@ async function handleScan(qr, container) {
     if (!e.status && !navigator.onLine) {
       scanOverlay.show({
         state: 'warning',
-        title: 'Offline',
-        subtitle: 'Item info unavailable — queue return?',
+        title: _c('offline'),
+        subtitle: __('unavailableQueue'),
         buttons: [
-          { label: 'Return Anyway', action: doConfirmReturn },
-          { label: 'Cancel', action: doReset },
+          { label: __('returnAnyway'), action: doConfirmReturn },
+          { label: _c('cancel'),       action: doReset },
         ],
       });
       return;
@@ -163,11 +167,11 @@ async function handleScan(qr, container) {
 
     scanOverlay.show({
       state: 'error',
-      title: 'Not found',
-      subtitle: e.status === 404 ? 'QR not in inventory' : 'Lookup failed',
+      title: _c('notFound'),
+      subtitle: e.status === 404 ? _c('notFound') : _c('lookingUp'),
       buttons: [
-        { label: 'OK', action: doReset },
-        { label: 'Enter Manually', action: doManual },
+        { label: _c('ok'),            action: doReset },
+        { label: _c('enterManually'), action: doManual },
       ],
     });
 
@@ -179,11 +183,11 @@ async function confirmCheckin(qr, container) {
   try {
     const res = await post('/checkin', { item_qr: qr });
     if (res.__offline) {
-      toast('Saved offline — will sync when connected');
+      toast(_c('offlineSaved'));
     } else if (res.success) {
-      toast('Returned: ' + (lastItem?.name ?? qr));
+      toast(__('returned').replace('[NAME]', lastItem?.name ?? qr));
     } else {
-      toast('Item was not checked out');
+      toast(__('notCheckedOut'));
     }
   } catch (e) {
     toast('Error: ' + e.message);
