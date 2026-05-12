@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Water distribution — Barrio Support</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.0">
+<style>
+  body {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 0 1rem 3rem;
+  }
+
+  /* ── Page header ── */
+  .w-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .75rem 0;
+    margin-bottom: 1.5rem;
+  }
+  .w-logo { font-size: 13px; color: var(--text3); }
+  .w-logo span { color: var(--accent); }
+
+  /* ── Hero ── */
+  .w-hero {
+    text-align: center;
+    padding: 1.5rem 0 1.25rem;
+  }
+  .w-hero-icon { font-size: 2.5rem; margin-bottom: .5rem; }
+  .w-hero h1 { font-size: 22px; margin-bottom: .35rem; }
+  .w-hero p  { font-size: 14px; color: var(--text2); }
+
+  /* ── Sections ── */
+  .w-section { margin-bottom: 1.75rem; }
+  .w-section-title {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: .85rem;
+    padding-bottom: .4rem;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  /* ── Steps ── */
+  .w-steps { display: flex; flex-direction: column; gap: .75rem; }
+  .w-step {
+    display: flex;
+    gap: .85rem;
+    align-items: flex-start;
+  }
+  .w-step-num {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    color: var(--accent-text);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+  .w-step-body {}
+  .w-step-title { font-size: 14px; font-weight: bold; margin-bottom: .2rem; }
+  .w-step-text  { font-size: 13px; color: var(--text2); line-height: 1.55; }
+  .w-step-text strong { color: var(--text); }
+
+  /* ── About card ── */
+  .w-about-card {
+    background: var(--accent-light);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.1rem;
+    font-size: 13px;
+    color: var(--accent-text);
+    line-height: 1.6;
+  }
+  .w-about-card + .w-about-card { margin-top: .75rem; }
+  .w-about-card strong { color: var(--accent-text); }
+  .w-about-card em { font-style: italic; }
+
+  /* ── Deposit note ── */
+  .w-deposit-note {
+    margin-top: .75rem;
+    padding: .75rem 1rem;
+    background: var(--warn-bg);
+    border: 0.5px solid var(--warn-border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--warn);
+    line-height: 1.5;
+  }
+  .w-deposit-note strong { color: var(--warn); }
+
+  /* ── Check voucher CTA ── */
+  .w-cta {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.25rem;
+    text-align: center;
+  }
+  .w-cta-title { font-size: 15px; margin-bottom: .3rem; }
+  .w-cta-body  { font-size: 13px; color: var(--text2); margin-bottom: .85rem; line-height: 1.5; }
+  .w-cta .btn  { max-width: 280px; margin: 0 auto; }
+
+  /* ── Footer note ── */
+  .w-footer-note {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text3);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<header class="w-header">
+  <div class="w-logo">Barrio <span>Support</span></div>
+  <div class="lang-switcher" id="lang-switcher"></div>
+</header>
+
+<main id="water-main">
+  <!-- Rendered by water.js -->
+</main>
+
+<script type="module" src="/assets/js/water.js?v=1.0.0"></script>
+</body>
+</html>

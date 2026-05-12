@@ -1,0 +1,748 @@
+/**
+ * Lightweight i18n module — vanilla JS, no dependencies.
+ *
+ * Usage on any page:
+ *   import { initLang, t, renderSwitcher, onLangChange } from './i18n.js';
+ *   initLang();
+ *   renderSwitcher(document.getElementById('lang-switcher'));
+ *   onLangChange(() => renderMyPage());
+ *   renderMyPage(); // call once on load
+ *
+ * Adding a new language: add its key to `translations` below.
+ * Adding a new page namespace: add keys under each language object.
+ *
+ * Translations with HTML markup should use the _html suffix convention
+ * and be set via innerHTML by the page renderer (not via data-i18n).
+ *
+ * Interpolated strings use [TOKEN] syntax — callers replace tokens:
+ *   t('checkout', 'success').replace('[N]', n).replace('[BARRIO]', name)
+ */
+
+const STORAGE_KEY = 'barrio_lang';
+
+// ─── Translations ─────────────────────────────────────────────────────────────
+
+export const translations = {
+  en: {
+    common: {
+      langName:         'English',
+      checkVoucher:     'Check voucher status',
+      questions:        'Questions? Come to NoInfo or speak to any barrio support staff.',
+      backToWater:      'Water info',
+      ok:               'OK',
+      cancel:           'Cancel',
+      undo:             'Undo',
+      confirm:          'Confirm',
+      tryAgain:         'Try Again',
+      enterManually:    'Enter Manually',
+      back:             'Back',
+      refresh:          'Refresh',
+      loadMore:         'Load more',
+      next:             'Next',
+      scanAnother:      'Scan another',
+      cancelScan:       'Cancel scan',
+      offlineSaved:     'Saved offline — will sync when connected',
+      offline:          'Offline',
+      aimCamera:        'Aim camera at QR code…',
+      cameraError:      'Camera error — check permissions',
+      lookingUp:        'Looking up…',
+      notFound:         'Not found',
+      notRecognised:    'Not recognised',
+      statusAvailable:  'Available',
+      statusCheckedOut: 'Checked out',
+      statusActivated:  'Activated',
+      statusUsed:       'Used',
+      statusRetired:    'Retired',
+      statusOut:        'Out',
+    },
+    water: {
+      pageTitle:    'Water distribution',
+      pageSubtitle: 'How to get water for your barrio',
+      howTitle:     'How it works',
+      aboutTitle:   'About the dual voucher',
+      step1Title:   'Collect your voucher',
+      step1Body:    'At registration you received a water voucher — a card printed with two QR codes, one on each half.',
+      step2Title:   'Deposit the bottom half',
+      step2Body:    'Tear off the bottom section and drop it in the voucher box at NoInfo before [DEPOSIT_TIME] to be included in the next water run.',
+      step3Title:   'Come to the water station',
+      step3Body:    'Bring the top half of your card to the water station at [WATER_RUN_TIME]. Keep it safe — it\'s your receipt.',
+      step4Title:   'Validator scan',
+      step4Body:    'A validator will scan the QR code on your card before filling begins.',
+      step5Title:   'Fill & disinfection',
+      step5Body:    'Your containers will be filled and a small amount of chlorine added to each for safe drinking water.',
+      aboutBody:    'Your water voucher is printed with <strong>two QR codes</strong> — one on each half of the card. This lets us schedule water runs in advance. The bottom half is your <em>request</em>: it goes in the box at NoInfo so we know how many barrios need water. The top half is your <em>receipt</em>: bring it to the water station and use it to check your fill status below.',
+      depositNote:  'The NoInfo drop box accepts vouchers until [DEPOSIT_TIME] for each run. After that, your voucher will be included in the following run.',
+      checkTitle:   'Check your fill status',
+      checkBody:    'Scan your voucher (top half) to see whether your water has been confirmed filled and disinfected.',
+    },
+    item: {
+      pageTitle:    'Equipment item',
+      systemNote:   'This item is part of the barrio support equipment tracking system.',
+      statusOut:    'Currently checked out',
+      statusIn:     'Currently available',
+      statusRetired:'Retired',
+      foundTitle:   'Found this item?',
+      foundNote:    'If you\'ve found this equipment, please contact barrio support:',
+      loginBtn:     'Log in to manage equipment',
+      voucherNote:  'This QR code is for a water voucher.',
+      checkVoucher: 'Check water voucher status',
+      notFound:     'Item not recognised',
+      notFoundNote: 'This QR code wasn\'t found in the system. Please contact barrio support if you think this is an error.',
+      contactEmail: '[SUPPORT_EMAIL]',
+    },
+    nav: {
+      lend:      'Lend',
+      scanIn:    'Scan In',
+      barrios:   'Barrios',
+      inventory: 'Inventory',
+      history:   'History',
+      admin:     'Admin',
+      logout:    'Log out',
+    },
+    checkout: {
+      title:            'Lend',
+      step1:            'Select barrio',
+      step2:            'Scan items',
+      step3:            'Finalise',
+      aimBarrio:        'Aim camera at barrio QR code…',
+      barrioNotFound:   'Barrio QR not found',
+      typeName:         'Type barrio name or ID',
+      continueItems:    'Continue to Items',
+      checkInWithout:   'Check In Without Lending',
+      goToBarrio:       'Go to Barrio',
+      aimItem:          'Aim camera at item QR code…',
+      alreadyInList:    'Already in list',
+      itemUnavailable:  'Item details unavailable — add by QR?',
+      qrNotFound:       'QR not in inventory',
+      lookupFailed:     'Lookup failed',
+      typeQr:           'Type item QR code',
+      continueScanning: 'Continue Scanning',
+      doneScanning:     'Done Scanning',
+      equipmentOrdered: 'Equipment ordered',
+      scannedItems:     'Scanned items',
+      noItems:          'No items scanned yet',
+      reviewLend:       'Review & lend',
+      recordArrival:    'Record Arrival — Consumables Given',
+      orientation:      'Orientation completed',
+      success:          'Lent [N] item(s) to [BARRIO]',
+    },
+    checkin: {
+      title:            'Scan In',
+      modeReturn:       'Return equipment',
+      modeVoucher:      'Validate voucher',
+      modeActivate:     'Activate vouchers',
+      alreadyReturned:  'Already returned — no action needed',
+      confirmReturn:    'Confirm Return',
+      notCheckedOut:    'Item was not checked out',
+      unavailableQueue: 'Item info unavailable — queue return?',
+      returnAnyway:     'Return Anyway',
+      returned:         'Returned: [NAME]',
+    },
+    activate: {
+      title:            'Activate vouchers',
+      aimScanner:       'Scan half-vouchers from the box…',
+      activating:       'Activating…',
+      activated:        'Activated',
+      alreadyActivated: 'Already activated',
+      cannotActivate:   'Cannot activate',
+      notAVoucher:      'Not a voucher',
+      unreadable:       'Unreadable',
+      activationFailed: 'Activation failed',
+      typeQr:           'Type voucher QR code',
+    },
+    barrios: {
+      title:             'Barrios',
+      statusExpected:    'Expected',
+      statusOnSite:      'On Site',
+      statusDeparted:    'Departed',
+      clearFilter:       '× Clear',
+      sectionArrival:    'Arrival',
+      sectionDeparture:  'Departure',
+      sectionConsumables:'Consumables',
+      sectionEquipment:  'Equipment orders',
+      sectionItems:      'Items out',
+      recordArrival:     'Record Arrival',
+      distributeItems:   'Distribute Items',
+      recordDeparture:   'Record Departure',
+      confirmArrival:    'Confirm Arrival',
+      confirmDeparture:  'Confirm Departure Anyway',
+      alreadyRecorded:   'Already recorded:',
+      notCheckedIn:      'Barrio not yet checked in',
+      purchased:         'Purchased',
+      given:             'Given',
+      remaining:         'Remaining',
+      arrivalDone:       'Arrival recorded for [BARRIO]',
+      departureDone:     'Departure recorded for [BARRIO]',
+      distributeDone:    'Distribution recorded for [BARRIO]',
+      enterQuantity:     'Enter at least one quantity',
+      noConnection:      'No connection — departure requires internet',
+      allReturned:       'All items returned',
+      itemsStillOut:     '[N] item(s) still checked out',
+    },
+    inventory: {
+      title:     'Inventory',
+      colItem:   'Item',
+      colStatus: 'Status',
+      colBarrio: 'Barrio',
+      empty:     'No items in inventory',
+      emptyHint: 'Tap refresh to load',
+      failed:    'Failed to load — check connection',
+    },
+    history: {
+      title:        'Transaction log',
+      empty:        'No transactions recorded yet',
+      failed:       'Failed to load — check connection',
+      checkedOutTo: 'Checked out to [BARRIO]',
+      returned:     'Returned',
+      returnedFrom: 'Returned from [BARRIO]',
+      by:           'by [USER]',
+      offlineBadge: 'offline',
+    },
+    validate: {
+      title:                'Voucher validation',
+      batchTitle:           'Validation batch',
+      aimScanner:           'Aim camera at voucher QR code…',
+      viewBatch:            'View batch ([N])',
+      doneBatch:            'Done ([N])',
+      confirmFill:          'Confirm fill + disinfection',
+      flagFill:             'Flag incomplete fill',
+      resumeNotice:         'Resuming previous session',
+      differentBarrio:      'Different barrio',
+      differentBarrioSub:   'Batch is for [BARRIO_A], this voucher is for [BARRIO_B]',
+      addToBatch:           'Add to batch',
+      confirmPreviousFirst: 'Confirm previous fill first',
+      validVoucher:         'Valid voucher',
+      alreadyUsed:          'Already used',
+      notActivated:         'Not activated',
+      notAVoucher:          'Not a voucher',
+      equipmentDetected:    'Equipment QR detected',
+      equipmentNote:        'Turn off Validate mode to return this item',
+      invalidVoucher:       'Invalid voucher',
+      flagNotesLabel:       'Describe the problem (which cube(s), what went wrong)',
+      flagNotesPlaceholder: 'e.g. Cube 2 not disinfected, ran out of bleach',
+      confirmSuccess:       'Fill confirmed for [N] voucher(s)',
+      flagSuccess:          'Incomplete fill flagged for [N] voucher(s)',
+      confirmError:         'Could not confirm fill — try again',
+      flagError:            'Could not flag fill — try again',
+      usedError:            'Could not mark as used',
+    },
+  },
+
+  es: {
+    common: {
+      langName:         'Español',
+      checkVoucher:     'Comprobar estado del vale',
+      questions:        '¿Preguntas? Acércate a NoInfo o habla con cualquier miembro del barrio support.',
+      backToWater:      'Info del agua',
+      ok:               'Aceptar',
+      cancel:           'Cancelar',
+      undo:             'Deshacer',
+      confirm:          'Confirmar',
+      tryAgain:         'Reintentar',
+      enterManually:    'Introducir manualmente',
+      back:             'Volver',
+      refresh:          'Actualizar',
+      loadMore:         'Cargar más',
+      next:             'Siguiente',
+      scanAnother:      'Escanear otro',
+      cancelScan:       'Cancelar escaneo',
+      offlineSaved:     'Guardado sin conexión — se sincronizará al conectar',
+      offline:          'Sin conexión',
+      aimCamera:        'Apunta la cámara al código QR…',
+      cameraError:      'Error de cámara — comprueba los permisos',
+      lookingUp:        'Buscando…',
+      notFound:         'No encontrado',
+      notRecognised:    'No reconocido',
+      statusAvailable:  'Disponible',
+      statusCheckedOut: 'Prestado',
+      statusActivated:  'Activado',
+      statusUsed:       'Usado',
+      statusRetired:    'Retirado',
+      statusOut:        'Fuera',
+    },
+    water: {
+      pageTitle:    'Distribución de agua',
+      pageSubtitle: 'Cómo conseguir agua para tu barrio',
+      howTitle:     'Cómo funciona',
+      aboutTitle:   'Sobre el vale doble',
+      step1Title:   'Recoge tu vale',
+      step1Body:    'Al registrarte recibiste un vale de agua — una tarjeta con dos códigos QR, uno en cada mitad.',
+      step2Title:   'Deposita la mitad inferior',
+      step2Body:    'Separa la parte inferior y deposítala en el buzón de vales de NoInfo antes de las [DEPOSIT_TIME] para ser incluido en la próxima distribución.',
+      step3Title:   'Ven a la estación de agua',
+      step3Body:    'Trae la mitad superior de tu tarjeta a la estación de agua a las [WATER_RUN_TIME]. Guárdala bien — es tu recibo.',
+      step4Title:   'Escaneo del validador',
+      step4Body:    'Un validador escaneará el código QR de tu tarjeta antes de comenzar el llenado.',
+      step5Title:   'Llenado y desinfección',
+      step5Body:    'Tus recipientes se llenarán y se añadirá una pequeña cantidad de cloro a cada uno para garantizar agua potable segura.',
+      aboutBody:    'Tu vale de agua tiene <strong>dos códigos QR</strong> — uno en cada mitad. Esto nos permite planificar las distribuciones con antelación. La mitad inferior es tu <em>solicitud</em>: va en el buzón de NoInfo para que sepamos cuántos barrios necesitan agua. La mitad superior es tu <em>recibo</em>: llévalo a la estación de agua y úsalo para comprobar el estado del llenado.',
+      depositNote:  'El buzón de NoInfo acepta vales hasta las [DEPOSIT_TIME] para cada distribución. Después, tu vale se incluirá en la siguiente.',
+      checkTitle:   'Comprueba el estado de tu llenado',
+      checkBody:    'Escanea tu vale (mitad superior) para ver si tu agua ha sido confirmada como llenada y desinfectada.',
+    },
+    item: {
+      pageTitle:    'Objeto de equipo',
+      systemNote:   'Este objeto forma parte del sistema de seguimiento de equipamiento del barrio support.',
+      statusOut:    'Actualmente prestado',
+      statusIn:     'Actualmente disponible',
+      statusRetired:'Retirado',
+      foundTitle:   '¿Has encontrado este objeto?',
+      foundNote:    'Si has encontrado este equipamiento, ponte en contacto con barrio support:',
+      loginBtn:     'Iniciar sesión para gestionar el equipamiento',
+      voucherNote:  'Este código QR corresponde a un vale de agua.',
+      checkVoucher: 'Comprobar estado del vale de agua',
+      notFound:     'Objeto no reconocido',
+      notFoundNote: 'Este código QR no se encontró en el sistema. Contacta con barrio support si crees que es un error.',
+      contactEmail: '[SUPPORT_EMAIL]',
+    },
+    nav: {
+      lend:      'Prestar',
+      scanIn:    'Escanear',
+      barrios:   'Barrios',
+      inventory: 'Inventario',
+      history:   'Historial',
+      admin:     'Admin',
+      logout:    'Cerrar sesión',
+    },
+    checkout: {
+      title:            'Prestar',
+      step1:            'Seleccionar barrio',
+      step2:            'Escanear objetos',
+      step3:            'Finalizar',
+      aimBarrio:        'Apunta la cámara al QR del barrio…',
+      barrioNotFound:   'QR de barrio no encontrado',
+      typeName:         'Escribe el nombre o ID del barrio',
+      continueItems:    'Continuar a objetos',
+      checkInWithout:   'Registrar llegada sin préstamo',
+      goToBarrio:       'Ir al barrio',
+      aimItem:          'Apunta la cámara al QR del objeto…',
+      alreadyInList:    'Ya en la lista',
+      itemUnavailable:  'Detalles del objeto no disponibles — ¿añadir por QR?',
+      qrNotFound:       'QR no encontrado en inventario',
+      lookupFailed:     'Búsqueda fallida',
+      typeQr:           'Escribe el código QR del objeto',
+      continueScanning: 'Seguir escaneando',
+      doneScanning:     'Terminar escaneo',
+      equipmentOrdered: 'Material pedido',
+      scannedItems:     'Objetos escaneados',
+      noItems:          'Aún no se han escaneado objetos',
+      reviewLend:       'Revisar y prestar',
+      recordArrival:    'Registrar llegada — consumibles entregados',
+      orientation:      'Orientación completada',
+      success:          'Prestado(s) [N] objeto(s) a [BARRIO]',
+    },
+    checkin: {
+      title:            'Escanear',
+      modeReturn:       'Devolver equipamiento',
+      modeVoucher:      'Validar vale',
+      modeActivate:     'Activar vales',
+      alreadyReturned:  'Ya devuelto — no se requiere acción',
+      confirmReturn:    'Confirmar devolución',
+      notCheckedOut:    'El objeto no estaba prestado',
+      unavailableQueue: 'Info del objeto no disponible — ¿poner en cola?',
+      returnAnyway:     'Devolver de todas formas',
+      returned:         'Devuelto: [NAME]',
+    },
+    activate: {
+      title:            'Activar vales',
+      aimScanner:       'Escanea los medios vales del buzón…',
+      activating:       'Activando…',
+      activated:        'Activado',
+      alreadyActivated: 'Ya activado',
+      cannotActivate:   'No se puede activar',
+      notAVoucher:      'No es un vale',
+      unreadable:       'Ilegible',
+      activationFailed: 'Activación fallida',
+      typeQr:           'Escribe el código QR del vale',
+    },
+    barrios: {
+      title:             'Barrios',
+      statusExpected:    'Esperado',
+      statusOnSite:      'En el sitio',
+      statusDeparted:    'Se fue',
+      clearFilter:       '× Borrar',
+      sectionArrival:    'Llegada',
+      sectionDeparture:  'Salida',
+      sectionConsumables:'Consumibles',
+      sectionEquipment:  'Material pedido',
+      sectionItems:      'Objetos fuera',
+      recordArrival:     'Registrar llegada',
+      distributeItems:   'Distribuir material',
+      recordDeparture:   'Registrar salida',
+      confirmArrival:    'Confirmar llegada',
+      confirmDeparture:  'Confirmar salida igualmente',
+      alreadyRecorded:   'Ya registrado:',
+      notCheckedIn:      'Barrio aún no ha llegado',
+      purchased:         'Comprado',
+      given:             'Entregado',
+      remaining:         'Restante',
+      arrivalDone:       'Llegada registrada para [BARRIO]',
+      departureDone:     'Salida registrada para [BARRIO]',
+      distributeDone:    'Distribución registrada para [BARRIO]',
+      enterQuantity:     'Introduce al menos una cantidad',
+      noConnection:      'Sin conexión — la salida requiere internet',
+      allReturned:       'Todos los objetos devueltos',
+      itemsStillOut:     '[N] objeto(s) todavía prestado(s)',
+    },
+    inventory: {
+      title:     'Inventario',
+      colItem:   'Objeto',
+      colStatus: 'Estado',
+      colBarrio: 'Barrio',
+      empty:     'No hay objetos en el inventario',
+      emptyHint: 'Toca actualizar para cargar',
+      failed:    'No se pudo cargar — comprueba la conexión',
+    },
+    history: {
+      title:        'Registro de transacciones',
+      empty:        'Aún no hay transacciones registradas',
+      failed:       'No se pudo cargar — comprueba la conexión',
+      checkedOutTo: 'Prestado a [BARRIO]',
+      returned:     'Devuelto',
+      returnedFrom: 'Devuelto desde [BARRIO]',
+      by:           'por [USER]',
+      offlineBadge: 'sin conexión',
+    },
+    validate: {
+      title:                'Validación de vales',
+      batchTitle:           'Lote de validación',
+      aimScanner:           'Apunta la cámara al QR del vale…',
+      viewBatch:            'Ver lote ([N])',
+      doneBatch:            'Hecho ([N])',
+      confirmFill:          'Confirmar llenado + desinfección',
+      flagFill:             'Marcar llenado incompleto',
+      resumeNotice:         'Retomando sesión anterior',
+      differentBarrio:      'Barrio diferente',
+      differentBarrioSub:   'El lote es para [BARRIO_A], este vale es para [BARRIO_B]',
+      addToBatch:           'Añadir al lote',
+      confirmPreviousFirst: 'Confirmar el llenado anterior primero',
+      validVoucher:         'Vale válido',
+      alreadyUsed:          'Ya usado',
+      notActivated:         'No activado',
+      notAVoucher:          'No es un vale',
+      equipmentDetected:    'QR de equipo detectado',
+      equipmentNote:        'Desactiva el modo Validar para devolver este objeto',
+      invalidVoucher:       'Vale inválido',
+      flagNotesLabel:       'Describe el problema (qué cuba(s), qué salió mal)',
+      flagNotesPlaceholder: 'ej. Cuba 2 sin desinfectar, se acabó la lejía',
+      confirmSuccess:       'Llenado confirmado para [N] vale(s)',
+      flagSuccess:          'Llenado incompleto marcado para [N] vale(s)',
+      confirmError:         'No se pudo confirmar el llenado — inténtalo de nuevo',
+      flagError:            'No se pudo marcar el llenado — inténtalo de nuevo',
+      usedError:            'No se pudo marcar como usado',
+    },
+  },
+
+  fr: {
+    common: {
+      langName:         'Français',
+      checkVoucher:     'Vérifier le statut du bon',
+      questions:        'Des questions ? Rendez-vous à NoInfo ou parlez à un membre du barrio support.',
+      backToWater:      'Info eau',
+      ok:               'OK',
+      cancel:           'Annuler',
+      undo:             'Annuler',
+      confirm:          'Confirmer',
+      tryAgain:         'Réessayer',
+      enterManually:    'Saisir manuellement',
+      back:             'Retour',
+      refresh:          'Actualiser',
+      loadMore:         'Charger plus',
+      next:             'Suivant',
+      scanAnother:      'Scanner un autre',
+      cancelScan:       'Annuler le scan',
+      offlineSaved:     'Enregistré hors ligne — synchronisation à la reconnexion',
+      offline:          'Hors ligne',
+      aimCamera:        'Pointez la caméra vers le QR code…',
+      cameraError:      'Erreur caméra — vérifiez les permissions',
+      lookingUp:        'Recherche…',
+      notFound:         'Introuvable',
+      notRecognised:    'Non reconnu',
+      statusAvailable:  'Disponible',
+      statusCheckedOut: 'Sorti',
+      statusActivated:  'Activé',
+      statusUsed:       'Utilisé',
+      statusRetired:    'Retraité',
+      statusOut:        'Sorti',
+    },
+    water: {
+      pageTitle:    'Distribution d\'eau',
+      pageSubtitle: 'Comment obtenir de l\'eau pour votre barrio',
+      howTitle:     'Comment ça marche',
+      aboutTitle:   'Le système à double bon',
+      step1Title:   'Récupérez votre bon',
+      step1Body:    'À l\'inscription, vous avez reçu un bon d\'eau — une carte avec deux QR codes, un sur chaque moitié.',
+      step2Title:   'Déposez la moitié inférieure',
+      step2Body:    'Détachez la partie basse et déposez-la dans la boîte à bons de NoInfo avant [DEPOSIT_TIME] pour être inclus·e dans la prochaine distribution.',
+      step3Title:   'Venez à la station d\'eau',
+      step3Body:    'Apportez la moitié supérieure de votre carte à la station d\'eau à [WATER_RUN_TIME]. Conservez-la précieusement — c\'est votre reçu.',
+      step4Title:   'Scan du validateur',
+      step4Body:    'Un validateur scannera le QR code de votre carte avant de commencer le remplissage.',
+      step5Title:   'Remplissage et désinfection',
+      step5Body:    'Vos contenants seront remplis et une petite quantité de chlore sera ajoutée à chacun pour une eau potable sûre.',
+      aboutBody:    'Votre bon d\'eau comporte <strong>deux QR codes</strong> — un sur chaque moitié. Cela nous permet de planifier les distributions à l\'avance. La moitié inférieure est votre <em>demande</em> : elle va dans la boîte de NoInfo pour que nous sachions combien de barrios ont besoin d\'eau. La moitié supérieure est votre <em>reçu</em> : apportez-la à la station d\'eau et utilisez-la pour vérifier le statut de votre remplissage.',
+      depositNote:  'La boîte de NoInfo accepte les bons jusqu\'à [DEPOSIT_TIME] pour chaque distribution. Après cela, votre bon sera inclus dans la distribution suivante.',
+      checkTitle:   'Vérifiez le statut de votre remplissage',
+      checkBody:    'Scannez votre bon (moitié supérieure) pour voir si votre eau a été confirmée remplie et désinfectée.',
+    },
+    item: {
+      pageTitle:    'Objet d\'équipement',
+      systemNote:   'Cet objet fait partie du système de suivi d\'équipement du barrio support.',
+      statusOut:    'Actuellement sorti',
+      statusIn:     'Actuellement disponible',
+      statusRetired:'Retraité',
+      foundTitle:   'Vous avez trouvé cet objet ?',
+      foundNote:    'Si vous avez trouvé cet équipement, veuillez contacter le barrio support :',
+      loginBtn:     'Se connecter pour gérer l\'équipement',
+      voucherNote:  'Ce QR code correspond à un bon d\'eau.',
+      checkVoucher: 'Vérifier le statut du bon d\'eau',
+      notFound:     'Objet non reconnu',
+      notFoundNote: 'Ce QR code n\'a pas été trouvé dans le système. Contactez le barrio support si vous pensez que c\'est une erreur.',
+      contactEmail: '[SUPPORT_EMAIL]',
+    },
+    nav: {
+      lend:      'Prêter',
+      scanIn:    'Scanner',
+      barrios:   'Barrios',
+      inventory: 'Inventaire',
+      history:   'Historique',
+      admin:     'Admin',
+      logout:    'Déconnexion',
+    },
+    checkout: {
+      title:            'Prêter',
+      step1:            'Choisir le barrio',
+      step2:            'Scanner les objets',
+      step3:            'Finaliser',
+      aimBarrio:        'Pointez la caméra vers le QR du barrio…',
+      barrioNotFound:   'QR de barrio introuvable',
+      typeName:         'Tapez le nom ou l\'ID du barrio',
+      continueItems:    'Continuer vers les objets',
+      checkInWithout:   'Enregistrer arrivée sans prêt',
+      goToBarrio:       'Aller au barrio',
+      aimItem:          'Pointez la caméra vers le QR de l\'objet…',
+      alreadyInList:    'Déjà dans la liste',
+      itemUnavailable:  'Détails de l\'objet indisponibles — ajouter par QR ?',
+      qrNotFound:       'QR absent de l\'inventaire',
+      lookupFailed:     'Recherche échouée',
+      typeQr:           'Tapez le QR code de l\'objet',
+      continueScanning: 'Continuer à scanner',
+      doneScanning:     'Terminer le scan',
+      equipmentOrdered: 'Matériel commandé',
+      scannedItems:     'Objets scannés',
+      noItems:          'Aucun objet scanné pour l\'instant',
+      reviewLend:       'Vérifier et prêter',
+      recordArrival:    'Enregistrer arrivée — consommables remis',
+      orientation:      'Orientation effectuée',
+      success:          '[N] objet(s) prêté(s) à [BARRIO]',
+    },
+    checkin: {
+      title:            'Scanner',
+      modeReturn:       'Retourner le matériel',
+      modeVoucher:      'Valider le bon',
+      modeActivate:     'Activer les bons',
+      alreadyReturned:  'Déjà retourné — aucune action requise',
+      confirmReturn:    'Confirmer le retour',
+      notCheckedOut:    'L\'objet n\'était pas sorti',
+      unavailableQueue: 'Info objet indisponible — mettre en file d\'attente ?',
+      returnAnyway:     'Retourner quand même',
+      returned:         'Retourné : [NAME]',
+    },
+    activate: {
+      title:            'Activer les bons',
+      aimScanner:       'Scannez les demi-bons de la boîte…',
+      activating:       'Activation…',
+      activated:        'Activé',
+      alreadyActivated: 'Déjà activé',
+      cannotActivate:   'Impossible à activer',
+      notAVoucher:      'Pas un bon',
+      unreadable:       'Illisible',
+      activationFailed: 'Échec d\'activation',
+      typeQr:           'Tapez le QR code du bon',
+    },
+    barrios: {
+      title:             'Barrios',
+      statusExpected:    'Attendu',
+      statusOnSite:      'Sur place',
+      statusDeparted:    'Parti',
+      clearFilter:       '× Effacer',
+      sectionArrival:    'Arrivée',
+      sectionDeparture:  'Départ',
+      sectionConsumables:'Consommables',
+      sectionEquipment:  'Commandes de matériel',
+      sectionItems:      'Objets sortis',
+      recordArrival:     'Enregistrer arrivée',
+      distributeItems:   'Distribuer le matériel',
+      recordDeparture:   'Enregistrer départ',
+      confirmArrival:    'Confirmer l\'arrivée',
+      confirmDeparture:  'Confirmer le départ quand même',
+      alreadyRecorded:   'Déjà enregistré :',
+      notCheckedIn:      'Barrio pas encore enregistré',
+      purchased:         'Acheté',
+      given:             'Remis',
+      remaining:         'Restant',
+      arrivalDone:       'Arrivée enregistrée pour [BARRIO]',
+      departureDone:     'Départ enregistré pour [BARRIO]',
+      distributeDone:    'Distribution enregistrée pour [BARRIO]',
+      enterQuantity:     'Saisissez au moins une quantité',
+      noConnection:      'Pas de connexion — le départ nécessite internet',
+      allReturned:       'Tous les objets retournés',
+      itemsStillOut:     '[N] objet(s) encore sorti(s)',
+    },
+    inventory: {
+      title:     'Inventaire',
+      colItem:   'Objet',
+      colStatus: 'Statut',
+      colBarrio: 'Barrio',
+      empty:     'Aucun objet dans l\'inventaire',
+      emptyHint: 'Appuyez sur actualiser pour charger',
+      failed:    'Échec du chargement — vérifiez la connexion',
+    },
+    history: {
+      title:        'Journal des transactions',
+      empty:        'Aucune transaction enregistrée pour l\'instant',
+      failed:       'Échec du chargement — vérifiez la connexion',
+      checkedOutTo: 'Sorti pour [BARRIO]',
+      returned:     'Retourné',
+      returnedFrom: 'Retourné depuis [BARRIO]',
+      by:           'par [USER]',
+      offlineBadge: 'hors ligne',
+    },
+    validate: {
+      title:                'Validation des bons',
+      batchTitle:           'Lot de validation',
+      aimScanner:           'Pointez la caméra vers le QR du bon…',
+      viewBatch:            'Voir le lot ([N])',
+      doneBatch:            'Terminé ([N])',
+      confirmFill:          'Confirmer remplissage + désinfection',
+      flagFill:             'Signaler remplissage incomplet',
+      resumeNotice:         'Reprise de la session précédente',
+      differentBarrio:      'Barrio différent',
+      differentBarrioSub:   'Le lot est pour [BARRIO_A], ce bon est pour [BARRIO_B]',
+      addToBatch:           'Ajouter au lot',
+      confirmPreviousFirst: 'Confirmer le remplissage précédent d\'abord',
+      validVoucher:         'Bon valide',
+      alreadyUsed:          'Déjà utilisé',
+      notActivated:         'Non activé',
+      notAVoucher:          'Pas un bon',
+      equipmentDetected:    'QR d\'équipement détecté',
+      equipmentNote:        'Désactivez le mode Validation pour retourner cet objet',
+      invalidVoucher:       'Bon invalide',
+      flagNotesLabel:       'Décrivez le problème (quelle(s) cuve(s), ce qui s\'est passé)',
+      flagNotesPlaceholder: 'ex. Cuve 2 non désinfectée, plus d\'eau de Javel',
+      confirmSuccess:       'Remplissage confirmé pour [N] bon(s)',
+      flagSuccess:          'Remplissage incomplet signalé pour [N] bon(s)',
+      confirmError:         'Impossible de confirmer le remplissage — réessayez',
+      flagError:            'Impossible de signaler le remplissage — réessayez',
+      usedError:            'Impossible de marquer comme utilisé',
+    },
+  },
+};
+
+// ─── Core ─────────────────────────────────────────────────────────────────────
+
+const listeners = [];
+let currentLang = 'en';
+
+export function getLang() {
+  return currentLang;
+}
+
+/**
+ * Call once on page load. Priority:
+ *  1. ?lang= URL param (lets QR codes on printed materials set language)
+ *  2. localStorage saved preference
+ *  3. Browser language
+ *  4. 'en' fallback
+ */
+export function initLang() {
+  const urlLang = new URLSearchParams(window.location.search).get('lang');
+  if (urlLang && translations[urlLang]) {
+    currentLang = urlLang;
+    try { localStorage.setItem(STORAGE_KEY, urlLang); } catch {}
+    document.documentElement.lang = currentLang;
+    return;
+  }
+  let saved;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch { /* private browsing */ }
+  const browser = navigator.language?.slice(0, 2).toLowerCase();
+  currentLang =
+    (saved && translations[saved])       ? saved   :
+    (browser && translations[browser])   ? browser :
+    'en';
+  document.documentElement.lang = currentLang;
+}
+
+/** Switch to a supported language code. No-op for unknown codes. */
+export function setLang(lang) {
+  if (!translations[lang] || lang === currentLang) return;
+  currentLang = lang;
+  try { localStorage.setItem(STORAGE_KEY, lang); } catch {}
+  document.documentElement.lang = lang;
+  _refreshSwitchers();
+  applyTranslations();
+  listeners.forEach(fn => fn(lang));
+}
+
+/** Register a callback fired whenever the language changes. */
+export function onLangChange(fn) {
+  listeners.push(fn);
+}
+
+/**
+ * Translate a key within a namespace.
+ * t('water', 'pageTitle') → "Water distribution"
+ * Falls back to English, then returns a bracketed placeholder if missing.
+ */
+export function t(namespace, key) {
+  return translations[currentLang]?.[namespace]?.[key]
+      ?? translations.en?.[namespace]?.[key]
+      ?? `[${namespace}.${key}]`;
+}
+
+/**
+ * Apply translations to all elements with data-i18n="namespace.key".
+ * Called automatically by setLang(); also call manually after initLang().
+ */
+export function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const dot = el.dataset.i18n.indexOf('.');
+    if (dot === -1) return;
+    const ns  = el.dataset.i18n.slice(0, dot);
+    const key = el.dataset.i18n.slice(dot + 1);
+    el.textContent = t(ns, key);
+  });
+}
+
+// ─── Switcher ─────────────────────────────────────────────────────────────────
+
+const switcherEls = [];
+
+/**
+ * Render language switcher buttons into a container element.
+ * Can be called multiple times on different containers (e.g. header + footer).
+ * The container should have class="lang-switcher" for styling.
+ */
+export function renderSwitcher(container) {
+  if (!container) return;
+  switcherEls.push(container);
+  _buildSwitcher(container);
+}
+
+function _buildSwitcher(container) {
+  container.innerHTML = Object.keys(translations)
+    .map(lang =>
+      `<button class="lang-btn${lang === currentLang ? ' active' : ''}" data-lang="${lang}">${lang.toUpperCase()}</button>`
+    ).join('');
+  container.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.onclick = () => setLang(btn.dataset.lang);
+  });
+}
+
+function _refreshSwitchers() {
+  switcherEls.forEach(el => {
+    el.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.lang === currentLang);
+    });
+  });
+}

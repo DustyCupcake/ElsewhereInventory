@@ -1,0 +1,48 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Public (no-auth) endpoint for basic item information.
+ * Used by the /item landing page when someone scans an equipment QR code.
+ * Returns only non-sensitive data: name, type, status label, and whether
+ * it is a water voucher (so the page can redirect appropriately).
+ */
+function handle_item_info(): void {
+    require_method('GET');
+
+    $qr = trim($_GET['qr'] ?? '');
+    if ($qr === '') {
+        json_ok(['found' => false]);
+        return;
+    }
+
+    $stmt = db()->prepare(
+        'SELECT i.status, i.current_barrio_id, t.secure_qr,
+                CONCAT(t.name, \' #\', i.item_number) AS display_name,
+                t.name AS type_name
+         FROM equipment_items i
+         JOIN equipment_types t ON t.id = i.equipment_type_id
+         WHERE i.qr_code = ?'
+    );
+    $stmt->execute([$qr]);
+    $item = $stmt->fetch();
+
+    if (!$item) {
+        json_ok(['found' => false]);
+        return;
+    }
+
+    $status_label = match($item['status']) {
+        'checked-out', 'activated', 'used' => 'out',
+        'retired'                           => 'retired',
+        default                             => 'available',
+    };
+
+    json_ok([
+        'found'       => true,
+        'name'        => $item['display_name'],
+        'type_name'   => $item['type_name'],
+        'is_voucher'  => (bool) $item['secure_qr'],
+        'status'      => $status_label,
+    ]);
+}

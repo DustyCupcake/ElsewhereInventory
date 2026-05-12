@@ -5,6 +5,10 @@
 import { get, post } from './api.js?v=1.0.1';
 import { toast } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
+import { t } from './i18n.js?v=1.0.0';
+
+const __ = (key) => t('barrios', key);
+const _c = (key) => t('common', key);
 
 let container    = null;
 let detailId     = null;   // null = list view, number = detail view
@@ -58,22 +62,22 @@ function renderFiltered() {
     : allBarrios;
 
   const clearChip = activeFilter
-    ? `<div class="barrio-clear-chip" data-action="clear">× Clear</div>`
+    ? `<div class="barrio-clear-chip" data-action="clear">${__('clearFilter')}</div>`
     : '';
 
   container.innerHTML = `
     <div class="barrio-stats">
       <div class="barrio-stat-chip expected${activeFilter === 'expected' ? ' active' : ''}" data-filter="expected">
         <span class="status-dot expected"></span>
-        ${counts.expected} Expected
+        ${counts.expected} ${__('statusExpected')}
       </div>
       <div class="barrio-stat-chip on-site${activeFilter === 'on-site' ? ' active' : ''}" data-filter="on-site">
         <span class="status-dot on-site"></span>
-        ${counts['on-site']} On Site
+        ${counts['on-site']} ${__('statusOnSite')}
       </div>
       <div class="barrio-stat-chip departed${activeFilter === 'departed' ? ' active' : ''}" data-filter="departed">
         <span class="status-dot departed"></span>
-        ${counts.departed} Departed
+        ${counts.departed} ${__('statusDeparted')}
       </div>
       ${clearChip}
     </div>
@@ -139,7 +143,7 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
 
   const arrivalSection = status !== 'expected' ? `
     <div class="barrio-detail-section">
-      <div class="card-label">Arrival</div>
+      <div class="card-label">${__('sectionArrival')}</div>
       <div class="barrio-detail-row">
         <span class="barrio-detail-key">Arrived</span>
         <span>${fmtDateTime(barrio.arrived_at)}</span>
@@ -162,7 +166,7 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
 
   const equipOrdersSection = equipmentOrders.length ? `
     <div class="barrio-detail-section" style="margin-top:.75rem">
-      <div class="card-label">Equipment orders</div>
+      <div class="card-label">${__('sectionEquipment')}</div>
       ${equipmentOrders.map(o => {
         const over = o.quantity_checked_out > o.quantity_ordered;
         return `
@@ -179,7 +183,7 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
 
   const departureSection = status === 'departed' ? `
     <div class="barrio-detail-section" style="margin-top:.75rem">
-      <div class="card-label">Departure</div>
+      <div class="card-label">${__('sectionDeparture')}</div>
       <div class="barrio-detail-row">
         <span class="barrio-detail-key">Departed</span>
         <span>${fmtDateTime(barrio.departed_at)}</span>
@@ -193,7 +197,7 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
 
   const itemsSection = `
     <div class="barrio-detail-section" style="margin-top:.75rem">
-      <div class="card-label">Items out (${itemsOut.length})</div>
+      <div class="card-label">${__('sectionItems')} (${itemsOut.length})</div>
       ${itemsOut.length
         ? itemsOut.map(i => `
             <div class="item-row">
@@ -212,14 +216,14 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
   if (status === 'expected') {
     actionSection = `
       <div id="barrio-arrival-area">
-        <button class="btn primary" id="barrio-arrival-btn" style="margin-top:0">Record Arrival</button>
+        <button class="btn primary" id="barrio-arrival-btn" style="margin-top:0">${__('recordArrival')}</button>
       </div>
     `;
   } else if (status === 'on-site') {
     actionSection = `
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        ${entitlements.length ? `<button class="btn" id="barrio-distribute-btn" style="margin-top:0;flex:1">Distribute Items</button>` : ''}
-        <button class="btn danger" id="barrio-departure-btn" style="margin-top:0;flex:1">Record Departure</button>
+        ${entitlements.length ? `<button class="btn" id="barrio-distribute-btn" style="margin-top:0;flex:1">${__('distributeItems')}</button>` : ''}
+        <button class="btn danger" id="barrio-departure-btn" style="margin-top:0;flex:1">${__('recordDeparture')}</button>
       </div>
       <div id="barrio-distribute-area"></div>
     `;
@@ -265,10 +269,10 @@ function entitlementsHTML(entitlements, status) {
     <div style="margin-top:.75rem">
       <div class="card-label">Consumables</div>
       <div style="display:grid;grid-template-columns:1fr repeat(3,auto);gap:.25rem .75rem;align-items:center;font-size:13px;margin-top:.4rem">
-        <span style="color:var(--text3)">Item</span>
-        <span style="color:var(--text3);text-align:right">Purchased</span>
-        <span style="color:var(--text3);text-align:right">Given</span>
-        <span style="color:var(--text3);text-align:right">Remaining</span>
+        <span style="color:var(--text3)">${t('inventory', 'colItem')}</span>
+        <span style="color:var(--text3);text-align:right">${__('purchased')}</span>
+        <span style="color:var(--text3);text-align:right">${__('given')}</span>
+        <span style="color:var(--text3);text-align:right">${__('remaining')}</span>
         ${entitlements.map(e => {
           const rem = e.remaining;
           const remColor = rem < 0 ? 'color:var(--danger)' : rem === 0 ? 'color:var(--success,#22c55e)' : 'color:var(--warn)';
@@ -306,19 +310,19 @@ function showArrivalForm(barrio, entitlements) {
 
   area.innerHTML = `
     <div class="card arrival-form-section" style="margin-top:0">
-      <div class="card-label">Record Arrival</div>
+      <div class="card-label">${__('recordArrival')}</div>
       ${itemInputsHTML}
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);margin-bottom:.75rem;margin-top:.25rem">
         <input type="checkbox" id="ba-orientation" style="width:auto;margin:0;accent-color:var(--accent)">
-        Orientation completed
+        ${t('checkout', 'orientation')}
       </label>
-      <button class="btn primary" id="ba-confirm" style="margin-top:0">Confirm Arrival</button>
-      <button class="btn ghost" id="ba-cancel">Cancel</button>
+      <button class="btn primary" id="ba-confirm" style="margin-top:0">${__('confirmArrival')}</button>
+      <button class="btn ghost" id="ba-cancel">${_c('cancel')}</button>
     </div>
   `;
 
   area.querySelector('#ba-cancel')?.addEventListener('click', () => {
-    area.innerHTML = `<button class="btn primary" id="barrio-arrival-btn" style="margin-top:0">Record Arrival</button>`;
+    area.innerHTML = `<button class="btn primary" id="barrio-arrival-btn" style="margin-top:0">${__('recordArrival')}</button>`;
     area.querySelector('#barrio-arrival-btn')?.addEventListener('click', () => showArrivalForm(barrio, entitlements));
   });
 
@@ -341,16 +345,16 @@ function showArrivalForm(barrio, entitlements) {
         items,
         orientation_done: orient,
       });
-      toast('Arrival recorded for ' + barrio.name);
+      toast(__('arrivalDone').replace('[BARRIO]', barrio.name));
       loadDetail(barrio.id);
     } catch (e) {
       if (e.status === 409) {
-        toast('Already recorded: ' + e.message);
+        toast(__('alreadyRecorded') + ' ' + e.message);
         loadDetail(barrio.id);
       } else {
         toast('Error: ' + e.message);
         btn.disabled = false;
-        btn.textContent = 'Confirm Arrival';
+        btn.textContent = __('confirmArrival');
       }
     }
   });
@@ -381,10 +385,10 @@ function showDistributeForm(barrio, entitlements) {
 
   area.innerHTML = `
     <div class="card arrival-form-section" style="margin-top:.75rem">
-      <div class="card-label">Distribute Items${allDone ? ' <span style="color:var(--success,#22c55e);font-size:12px">— all distributed</span>' : ''}</div>
+      <div class="card-label">${__('distributeItems')}${allDone ? ' <span style="color:var(--success,#22c55e);font-size:12px">— all distributed</span>' : ''}</div>
       ${itemInputsHTML}
-      <button class="btn primary" id="dist-confirm" style="margin-top:.5rem">Confirm</button>
-      <button class="btn ghost" id="dist-cancel">Cancel</button>
+      <button class="btn primary" id="dist-confirm" style="margin-top:.5rem">${_c('confirm')}</button>
+      <button class="btn ghost" id="dist-cancel">${_c('cancel')}</button>
     </div>
   `;
 
@@ -398,19 +402,19 @@ function showDistributeForm(barrio, entitlements) {
       if (qty !== 0) items.push({ type_id: +inp.dataset.typeId, quantity: qty });
     });
 
-    if (!items.length) { toast('Enter at least one quantity'); return; }
+    if (!items.length) { toast(__('enterQuantity')); return; }
 
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Recording…';
 
     try {
       await post('/barrio-distribute', { barrio_id: barrio.id, items });
-      toast('Distribution recorded for ' + barrio.name);
+      toast(__('distributeDone').replace('[BARRIO]', barrio.name));
       loadDetail(barrio.id);
     } catch (e) {
       toast('Error: ' + e.message);
       btn.disabled = false;
-      btn.textContent = 'Confirm';
+      btn.textContent = _c('confirm');
     }
   });
 }
@@ -423,20 +427,20 @@ async function confirmDeparture(barrioId, itemsOutCount, barrioName) {
     scanOverlay.show({
       state: 'warning',
       title: barrioName,
-      subtitle: `${n} item${n !== 1 ? 's' : ''} still checked out`,
+      subtitle: __('itemsStillOut').replace('[N]', n),
       buttons: [
-        { label: 'Confirm Departure Anyway', action: () => doDeparture(barrioId, barrioName, true) },
-        { label: 'Cancel', action: () => scanOverlay.hide() },
+        { label: __('confirmDeparture'), action: () => doDeparture(barrioId, barrioName, true) },
+        { label: _c('cancel'),           action: () => scanOverlay.hide() },
       ],
     });
   } else {
     scanOverlay.show({
       state: 'success',
       title: barrioName,
-      subtitle: 'All items returned',
+      subtitle: __('allReturned'),
       buttons: [
-        { label: 'Record Departure', action: () => doDeparture(barrioId, barrioName, false) },
-        { label: 'Cancel', action: () => scanOverlay.hide() },
+        { label: __('recordDeparture'), action: () => doDeparture(barrioId, barrioName, false) },
+        { label: _c('cancel'),          action: () => scanOverlay.hide() },
       ],
     });
   }
@@ -447,10 +451,10 @@ async function doDeparture(barrioId, barrioName, force) {
   try {
     const result = await post('/barrio-departure', { barrio_id: barrioId, force });
     if (result.__offline) {
-      toast('No connection — departure requires internet');
+      toast(__('noConnection'));
       return;
     }
-    toast('Departure recorded for ' + barrioName);
+    toast(__('departureDone').replace('[BARRIO]', barrioName));
     loadDetail(barrioId);
   } catch (e) {
     if (e.status === 409 && e.data?.error === 'items_outstanding') {
@@ -464,9 +468,9 @@ async function doDeparture(barrioId, barrioName, force) {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function statusLabel(s) {
-  if (s === 'expected') return 'Expected';
-  if (s === 'on-site')  return 'On Site';
-  if (s === 'departed') return 'Departed';
+  if (s === 'expected') return __('statusExpected');
+  if (s === 'on-site')  return __('statusOnSite');
+  if (s === 'departed') return __('statusDeparted');
   return s;
 }
 

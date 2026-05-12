@@ -203,3 +203,35 @@ label { display: block; font-size: 12px; color: var(--text2); margin-bottom: .25
 }
 .divider span { font-size: 11px; color: var(--text3); white-space: nowrap; }
 .divider::before, .divider::after { content: ''; flex: 1; height: 0.5px; background: var(--border); }
+
+/* ── Language switcher (i18n) ───────────────────────────────────────────── */
+.lang-switcher {
+  display: flex;
+  gap: 2px;
+}
+.lang-btn {
+  padding: 4px 8px;
+  font-family: 'Georgia', serif;
+  font-size: 11px;
+  letter-spacing: .05em;
+  border: 0.5px solid var(--border-med);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.lang-btn:hover { background: var(--surface2); color: var(--text); }
+.lang-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+
+/* ── Placeholder text (unset times / info) ──────────────────────────────── */
+.placeholder {
+  display: inline-block;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 0.5px solid var(--warn-border);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: .9em;
+  font-style: normal;
+}

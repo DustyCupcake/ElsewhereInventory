@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Equipment — Barrio Support</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.0">
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 0 1rem 3rem;
+  }
+
+  .it-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg);
+    border-bottom: 0.5px solid var(--border);
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .75rem 0;
+    margin-bottom: 1.5rem;
+  }
+  .it-logo { font-size: 13px; color: var(--text3); }
+  .it-logo span { color: var(--accent); }
+
+  .it-wrap { width: 100%; max-width: 480px; }
+
+  /* Item card */
+  .it-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+  .it-icon   { font-size: 2.5rem; margin-bottom: .6rem; }
+  .it-name   { font-size: 20px; margin-bottom: .25rem; }
+  .it-type   { font-size: 13px; color: var(--text3); margin-bottom: .85rem; }
+  .it-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .it-status.out      { background: #fff3e0; color: #b45309; }
+  .it-status.available{ background: var(--accent-light); color: var(--accent-text); }
+  .it-status.retired  { background: var(--surface2); color: var(--text3); }
+  .it-status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+  }
+
+  /* Info / found section */
+  .it-section {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1rem;
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+  .it-section-title {
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: .6rem;
+  }
+  .it-email {
+    display: block;
+    margin-top: .5rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .it-email:hover { text-decoration: underline; }
+
+  /* Voucher redirect note */
+  .it-voucher-note {
+    background: #e8f0fe;
+    border: 0.5px solid #4a80d4;
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1rem;
+    font-size: 13px;
+    color: #1a3a6e;
+    line-height: 1.6;
+  }
+
+  /* Not found */
+  .it-not-found {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text2);
+  }
+  .it-not-found-icon { font-size: 2rem; margin-bottom: .6rem; }
+  .it-not-found-title { font-size: 16px; margin-bottom: .4rem; color: var(--text); }
+
+  .it-spinner {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text3);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header class="it-header">
+  <div class="it-logo">Barrio <span>Support</span></div>
+  <div class="lang-switcher" id="lang-switcher"></div>
+</header>
+
+<div class="it-wrap" id="it-wrap">
+  <div class="it-spinner">Loading…</div>
+</div>
+
+<script type="module" src="/assets/js/item-public.js?v=1.0.0"></script>
+</body>
+</html>

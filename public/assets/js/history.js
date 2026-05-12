@@ -4,6 +4,10 @@
 
 import { get } from './api.js?v=1.0.1';
 import { toast } from './app.js?v=1.0.1';
+import { t } from './i18n.js?v=1.0.0';
+
+const __ = (key) => t('history', key);
+const _c = (key) => t('common', key);
 
 const PAGE = 50;
 let offset = 0;
@@ -13,14 +17,14 @@ export async function init(container) {
   offset = 0;
   container.innerHTML = `
     <div class="section-actions">
-      <div style="font-size:13px;color:var(--text2)" id="hist-title">Transaction log</div>
-      <button class="btn sm" onclick="window._hist.refresh()">Refresh</button>
+      <div style="font-size:13px;color:var(--text2)" id="hist-title">${__('title')}</div>
+      <button class="btn sm" onclick="window._hist.refresh()">${_c('refresh')}</button>
     </div>
     <div class="card" id="hist-card">
-      <div id="hist-body"><div class="empty">Tap refresh to load</div></div>
+      <div id="hist-body"><div class="empty"><span class="spinner"></span></div></div>
     </div>
     <div id="hist-more" style="display:none">
-      <button class="btn ghost" onclick="window._hist.loadMore()">Load more</button>
+      <button class="btn ghost" onclick="window._hist.loadMore()">${_c('loadMore')}</button>
     </div>
   `;
   window._hist = { refresh: () => { offset = 0; load(true); }, loadMore: () => load(false) };
@@ -34,6 +38,11 @@ async function load(reset) {
 
   if (offset === 0) body.innerHTML = '<div class="empty"><span class="spinner"></span> Loading…</div>';
 
+  // Refresh button label on language change
+  const more = document.getElementById('hist-more');
+  const moreBtn = more?.querySelector('button');
+  if (moreBtn) moreBtn.textContent = _c('loadMore');
+
   try {
     const data = await get('/history', { limit: PAGE, offset });
     total = data.total;
@@ -42,7 +51,7 @@ async function load(reset) {
     if (offset === 0) body.innerHTML = '';
 
     if (!log.length && offset === 0) {
-      body.innerHTML = '<div class="empty">No transactions recorded yet</div>';
+      body.innerHTML = `<div class="empty">${__('empty')}</div>`;
     } else {
       body.insertAdjacentHTML('beforeend', log.map(row => `
         <div class="history-row">
@@ -52,15 +61,17 @@ async function load(reset) {
           <div class="h-main">
             <div>
               ${row.item_name}
-              ${row.is_offline_entry ? '<span class="offline-badge">offline</span>' : ''}
+              ${row.is_offline_entry ? `<span class="offline-badge">${__('offlineBadge')}</span>` : ''}
             </div>
             <div class="h-detail">
               ${row.type === 'checkout'
-                ? `Checked out to ${row.barrio_name}`
-                : `Returned${row.barrio_name ? ' from ' + row.barrio_name : ''}`
+                ? __('checkedOutTo').replace('[BARRIO]', row.barrio_name)
+                : row.barrio_name
+                    ? __('returnedFrom').replace('[BARRIO]', row.barrio_name)
+                    : __('returned')
               }
             </div>
-            <div class="h-user">by ${row.performed_by_name ?? 'unknown'}</div>
+            <div class="h-user">${__('by').replace('[USER]', row.performed_by_name ?? 'unknown')}</div>
           </div>
           <div class="h-time">${formatTime(row.occurred_at)}</div>
         </div>
@@ -68,13 +79,12 @@ async function load(reset) {
     }
 
     offset += log.length;
-    const more = document.getElementById('hist-more');
     if (more) more.style.display = offset < total ? '' : 'none';
 
     const title = document.getElementById('hist-title');
-    if (title) title.textContent = `Transaction log (${total})`;
+    if (title) title.textContent = `${__('title')} (${total})`;
   } catch (e) {
-    body.innerHTML = '<div class="empty">Failed to load — check connection</div>';
+    body.innerHTML = `<div class="empty">${__('failed')}</div>`;
     toast('History error: ' + e.message);
   }
 }

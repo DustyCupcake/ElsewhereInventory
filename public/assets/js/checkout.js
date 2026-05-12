@@ -7,6 +7,10 @@ import { get, post } from './api.js?v=1.0.1';
 import { Scanner } from './scanner.js?v=1.0.0';
 import { toast, switchTab } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
+import { t } from './i18n.js?v=1.0.0';
+
+const __ = (key) => t('checkout', key);
+const _c = (key) => t('common', key);
 
 let step              = 1;
 let selectedCamp      = null;   // { id, name, arrival_status }
@@ -124,8 +128,8 @@ async function toggleCampScan() {
 
   wrap.style.display = '';
   stat.style.display = '';
-  btn.textContent = 'Cancel scan';
-  stat.textContent = 'Aim camera at barrio QR code…';
+  btn.textContent = _c('cancelScan');
+  stat.textContent = __('aimBarrio');
 
   scanner = new Scanner(document.getElementById('co-camp-video'), (value) => {
     let scannedId = value;
@@ -148,7 +152,7 @@ async function toggleCampScan() {
   });
 
   try { await scanner.start(); }
-  catch { stat.textContent = 'Camera error — check permissions'; scanner = null; }
+  catch { stat.textContent = _c('cameraError'); scanner = null; }
 }
 
 function showBarrioSuccess(match, wrap = null, btn = null, stat = null) {
@@ -174,16 +178,16 @@ function showBarrioSuccess(match, wrap = null, btn = null, stat = null) {
     }
   };
 
-  const checkInLabel = match.arrival_status === 'expected' ? 'Check In Without Lending' : 'Go to Barrio';
+  const checkInLabel = match.arrival_status === 'expected' ? __('checkInWithout') : __('goToBarrio');
 
   scanOverlay.show({
     state: 'success',
     title: match.name,
     subtitle: null,
     buttons: [
-      { label: 'Continue to Items', action: doConfirm },
-      { label: checkInLabel, action: doCheckInOnly },
-      { label: 'Undo', action: doUndo },
+      { label: __('continueItems'), action: doConfirm },
+      { label: checkInLabel,        action: doCheckInOnly },
+      { label: _c('undo'),          action: doUndo },
     ],
   });
 }
@@ -196,7 +200,7 @@ function showBarrioError(wrap, btn, stat) {
   };
   const doManual = () => {
     scanOverlay.showManualEntry({
-      placeholder: 'Type barrio name or ID',
+      placeholder: __('typeName'),
       onSubmit: (typed) => {
         const m = campList.find(c =>
           c.name.toLowerCase() === typed.toLowerCase() ||
@@ -207,11 +211,11 @@ function showBarrioError(wrap, btn, stat) {
         } else {
           scanOverlay.show({
             state: 'error',
-            title: 'Not recognised',
+            title: _c('notRecognised'),
             subtitle: `No barrio matches "${typed}"`,
             buttons: [
-              { label: 'OK', action: doOK },
-              { label: 'Enter Manually', action: doManual },
+              { label: _c('ok'),            action: doOK },
+              { label: _c('enterManually'), action: doManual },
             ],
           });
         }
@@ -222,11 +226,11 @@ function showBarrioError(wrap, btn, stat) {
 
   scanOverlay.show({
     state: 'error',
-    title: 'Not recognised',
-    subtitle: 'Barrio QR not found',
+    title: _c('notRecognised'),
+    subtitle: __('barrioNotFound'),
     buttons: [
-      { label: 'OK', action: doOK },
-      { label: 'Enter Manually', action: doManual },
+      { label: _c('ok'),            action: doOK },
+      { label: _c('enterManually'), action: doManual },
     ],
   });
 }
@@ -263,15 +267,15 @@ async function goStep2() {
         <video id="co-items-video" playsinline muted></video>
         <div class="scan-overlay"><div class="scan-frame"><div class="scan-line"></div></div></div>
       </div>
-      <div class="scan-status" id="co-items-status">Aim camera at item QR code…</div>
+      <div class="scan-status" id="co-items-status">${__('aimItem')}</div>
     </div>
     <div class="card" id="co-scanned-card">
-      <div class="card-label">Scanned items (<span id="co-count">0</span>)</div>
-      <div id="co-item-list"><div class="empty-list">No items scanned yet</div></div>
+      <div class="card-label">${__('scannedItems')} (<span id="co-count">0</span>)</div>
+      <div id="co-item-list"><div class="empty-list">${__('noItems')}</div></div>
     </div>
     <div style="display:flex;gap:.5rem">
-      <button class="btn ghost" style="flex:1" onclick="window._co.back()">Back</button>
-      <button class="btn primary" id="co-next2" disabled style="flex:2" onclick="window._co.goStep3()">Review &amp; lend</button>
+      <button class="btn ghost" style="flex:1" onclick="window._co.back()">${_c('back')}</button>
+      <button class="btn primary" id="co-next2" disabled style="flex:2" onclick="window._co.goStep3()">${__('reviewLend')}</button>
     </div>
   `;
 
@@ -302,7 +306,7 @@ function renderOrderSummary() {
 
   wrap.innerHTML = `
     <div class="card" style="padding:.75rem 1rem">
-      <div class="card-label" style="margin-bottom:.4rem">Equipment ordered</div>
+      <div class="card-label" style="margin-bottom:.4rem">${__('equipmentOrdered')}</div>
       ${orders.map(o => {
         const scanned = scannedByType[o.equipment_type_id] || 0;
         const met     = scanned >= o.quantity_ordered;
@@ -325,10 +329,10 @@ async function handleItemScan(qr) {
     scanOverlay.show({
       state: 'warning',
       title: existing.name,
-      subtitle: 'Already in list',
+      subtitle: __('alreadyInList'),
       buttons: [
-        { label: 'Continue Scanning', action: () => { scanOverlay.hide(); restartItemScanner(); } },
-        { label: 'Undo', action: () => { scanOverlay.hide(); restartItemScanner(); } },
+        { label: __('continueScanning'), action: () => { scanOverlay.hide(); restartItemScanner(); } },
+        { label: _c('undo'),             action: () => { scanOverlay.hide(); restartItemScanner(); } },
       ],
     });
     return;
@@ -380,9 +384,9 @@ async function handleItemScan(qr) {
     };
 
     const buttons = [
-      { label: 'Continue Scanning', action: doContinue },
-      ...(scannedItems.length >= 1 ? [{ label: 'Done Scanning', action: doDone }] : []),
-      { label: 'Undo', action: doUndo },
+      { label: __('continueScanning'), action: doContinue },
+      ...(scannedItems.length >= 1 ? [{ label: __('doneScanning'), action: doDone }] : []),
+      { label: _c('undo'), action: doUndo },
     ];
 
     scanOverlay.show({
@@ -399,7 +403,7 @@ async function handleItemScan(qr) {
     };
     const doManual = () => {
       scanOverlay.showManualEntry({
-        placeholder: 'Type item QR code',
+        placeholder: __('typeQr'),
         onSubmit: (typed) => handleItemScan(typed),
         onCancel: doOK,
       });
@@ -416,11 +420,11 @@ async function handleItemScan(qr) {
       };
       scanOverlay.show({
         state: 'warning',
-        title: 'Offline',
-        subtitle: 'Item details unavailable — add by QR?',
+        title: _c('offline'),
+        subtitle: __('itemUnavailable'),
         buttons: [
           { label: 'Add Anyway', action: doAddAnyway },
-          { label: 'Cancel', action: doOK },
+          { label: _c('cancel'), action: doOK },
         ],
       });
       return;
@@ -428,11 +432,11 @@ async function handleItemScan(qr) {
 
     scanOverlay.show({
       state: 'error',
-      title: 'Not found',
-      subtitle: e.status === 404 ? 'QR not in inventory' : 'Lookup failed',
+      title: _c('notFound'),
+      subtitle: e.status === 404 ? __('qrNotFound') : __('lookupFailed'),
       buttons: [
-        { label: 'OK', action: doOK },
-        { label: 'Enter Manually', action: doManual },
+        { label: _c('ok'),            action: doOK },
+        { label: _c('enterManually'), action: doManual },
       ],
     });
   }
@@ -462,7 +466,7 @@ function renderScannedList() {
   btn.disabled = scannedItems.length === 0;
 
   if (!scannedItems.length) {
-    list.innerHTML = '<div class="empty-list">No items scanned yet</div>';
+    list.innerHTML = `<div class="empty-list">${__('noItems')}</div>`;
     return;
   }
 
@@ -512,21 +516,21 @@ function goStep3() {
 
     arrivalForm = `
       <div class="arrival-form-section">
-        <div class="card-label">Record Arrival — Consumables Given</div>
+        <div class="card-label">${__('recordArrival')}</div>
         ${itemInputs}
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);margin-bottom:.25rem;margin-top:.25rem">
           <input type="checkbox" id="co-orientation" style="width:auto;margin:0;accent-color:var(--accent)">
-          Orientation completed
+          ${__('orientation')}
         </label>
       </div>
     `;
   } else if (needArrival) {
     arrivalForm = `
       <div class="arrival-form-section">
-        <div class="card-label">Record Arrival</div>
+        <div class="card-label">${t('barrios', 'recordArrival')}</div>
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);margin-bottom:.25rem">
           <input type="checkbox" id="co-orientation" style="width:auto;margin:0;accent-color:var(--accent)">
-          Orientation completed
+          ${__('orientation')}
         </label>
       </div>
     `;
@@ -555,8 +559,8 @@ function goStep3() {
       ${hasWarns ? '<div style="font-size:12px;color:var(--warn);margin-top:.75rem;font-style:italic">Items already lent will be force-transferred</div>' : ''}
       ${arrivalForm}
     </div>
-    <button class="btn primary" id="co-confirm" onclick="window._co.confirm()">Confirm lend</button>
-    <button class="btn ghost" onclick="window._co.back()">Back</button>
+    <button class="btn primary" id="co-confirm" onclick="window._co.confirm()">${__('reviewLend')}</button>
+    <button class="btn ghost" onclick="window._co.back()">${_c('back')}</button>
   `;
 
   window._co = {
@@ -578,7 +582,7 @@ async function finalise() {
     });
 
     if (result.__offline) {
-      toast('Saved offline — will sync when connected');
+      toast(_c('offlineSaved'));
       const container = document.getElementById('tab-checkout');
       renderStep1(container);
       loadCamps(container);
@@ -590,7 +594,7 @@ async function finalise() {
     if (failed.length) {
       toast(`${failed.length} item(s) failed to lend`);
     } else {
-      toast(`Lent ${scannedItems.length} item(s) to ${selectedCamp.name}`);
+      toast(__('success').replace('[N]', scannedItems.length).replace('[BARRIO]', selectedCamp.name));
     }
 
     // If this barrio was expected, also record arrival
@@ -610,7 +614,7 @@ async function finalise() {
           items,
           orientation_done: orient,
         });
-        toast('Arrival recorded for ' + selectedCamp.name);
+        toast(t('barrios', 'arrivalDone').replace('[BARRIO]', selectedCamp.name));
         selectedCamp.arrival_status = 'on-site';
       } catch {
         // Non-fatal — equipment was lent; arrival may have been recorded by another device
@@ -622,13 +626,13 @@ async function finalise() {
     loadCamps(container);
   } catch (e) {
     if (e.__offline) {
-      toast('Saved offline — will sync when connected');
+      toast(_c('offlineSaved'));
       const container = document.getElementById('tab-checkout');
       renderStep1(container);
     } else {
       toast('Error: ' + e.message);
       const btn = document.getElementById('co-confirm');
-      if (btn) { btn.disabled = false; btn.textContent = 'Confirm lend'; }
+      if (btn) { btn.disabled = false; btn.textContent = __('reviewLend'); }
     }
   }
 }
@@ -640,7 +644,7 @@ function stopScanner() {
 }
 
 function stepsHTML(active) {
-  const steps = ['Select barrio', 'Scan items', 'Finalise'];
+  const steps = [__('step1'), __('step2'), __('step3')];
   return '<div class="steps">' + steps.map((label, i) => {
     const n    = i + 1;
     const cls  = n < active ? 'done' : n === active ? 'active' : '';

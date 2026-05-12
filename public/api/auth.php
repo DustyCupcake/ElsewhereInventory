@@ -34,6 +34,7 @@ function require_auth(): array {
         'username'     => $_SESSION['username'],
         'display_name' => $_SESSION['display_name'],
         'role'         => $_SESSION['role'],
+        'language'     => $_SESSION['language'] ?? 'en',
     ];
 }
 

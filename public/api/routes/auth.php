@@ -13,7 +13,7 @@ function handle_login(): void {
         json_error('Username and password required');
     }
 
-    $stmt = db()->prepare('SELECT id, username, display_name, password_hash, role, is_active FROM users WHERE username = ?');
+    $stmt = db()->prepare('SELECT id, username, display_name, password_hash, role, language, is_active FROM users WHERE username = ?');
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
@@ -27,6 +27,7 @@ function handle_login(): void {
     $_SESSION['username']     = $user['username'];
     $_SESSION['display_name'] = $user['display_name'];
     $_SESSION['role']         = $user['role'];
+    $_SESSION['language']     = $user['language'] ?? 'en';
     $_SESSION['csrf_token']   = bin2hex(random_bytes(32));
 
     json_ok([
@@ -34,6 +35,7 @@ function handle_login(): void {
         'username'     => $user['username'],
         'display_name' => $user['display_name'],
         'role'         => $user['role'],
+        'language'     => $_SESSION['language'],
         'csrf_token'   => $_SESSION['csrf_token'],
     ]);
 }
@@ -90,4 +92,23 @@ function handle_register(): void {
     }
 
     json_ok(['message' => 'Account created. An admin will activate your account before you can log in.'], 201);
+}
+
+function handle_language(): void {
+    require_method('POST');
+    $user = require_auth();
+    verify_csrf();
+
+    $b    = body();
+    $lang = trim($b['lang'] ?? '');
+
+    // Validate: 2–5 lowercase letters only
+    if (!preg_match('/^[a-z]{2,5}$/', $lang)) {
+        json_error('Invalid language code');
+    }
+
+    db()->prepare('UPDATE users SET language = ? WHERE id = ?')->execute([$lang, $user['id']]);
+    $_SESSION['language'] = $lang;
+
+    json_ok(['success' => true, 'language' => $lang]);
 }

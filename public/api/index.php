@@ -46,6 +46,7 @@ $routes = [
     ['POST', '/auth/logout',   'routes/auth.php',              'handle_logout'],
     ['GET',  '/auth/me',       'routes/auth.php',              'handle_me'],
     ['GET',  '/auth/csrf',     'routes/auth.php',              'handle_csrf'],
+    ['POST', '/auth/language', 'routes/auth.php',              'handle_language'],
 
     // Staff
     ['GET',  '/camps',                  'routes/camps.php',         'handle_camps'],
@@ -55,6 +56,9 @@ $routes = [
     ['POST', '/checkin',                'routes/transactions.php',  'handle_checkin'],
     ['POST', '/items/use',              'routes/transactions.php',  'handle_used'],
     ['POST', '/items/activate',         'routes/transactions.php',  'handle_activate'],
+    ['POST', '/items/fill-confirm',     'routes/transactions.php',  'handle_fill_confirm'],
+    ['GET',  '/voucher/status',         'routes/voucher.php',       'handle_voucher_status'],
+    ['GET',  '/item/info',              'routes/item_public.php',   'handle_item_info'],
     ['GET',  '/history',                'routes/history.php',       'handle_history'],
     ['POST', '/sync/offline-queue',     'routes/sync.php',          'handle_sync'],
 
