@@ -35,7 +35,7 @@ function render() {
   const w = (key) => t('water', key);
   const c = (key) => t('common', key);
 
-  document.title = `${w('pageTitle')} — Barrio Support`;
+  document.title = `${w('pageTitle')} — Elsewhere Inventory`;
 
   document.getElementById('water-main').innerHTML = `
 

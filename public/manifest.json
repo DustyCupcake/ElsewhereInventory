@@ -1,7 +1,7 @@
 {
-  "name": "Barrio Support",
-  "short_name": "Barrio",
-  "description": "Equipment checkout tracker for camp barrios",
+  "name": "Elsewhere Inventory",
+  "short_name": "Elsewhere",
+  "description": "Event-wide equipment checkout and inventory tracker",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f4f0",

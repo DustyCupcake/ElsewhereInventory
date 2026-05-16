@@ -1,4 +1,4 @@
-# Barrio Support Tool
+# Elsewhere Inventory
 
 An event-wide equipment management platform built for large-scale camp operations. Production staff manage a central equipment pool; departments check out equipment and sub-lend it to barrios, artists, or individual people. Every transaction is tracked with a full audit trail and offline-first QR scanning.
 
@@ -129,7 +129,7 @@ No build system required — no npm, no bundler, no framework.
 ## Project Structure
 
 ```
-barrio_support/
+else_inventory/
 ├── public/                  # Web root (set this as document root)
 │   ├── index.html           # Main staff app
 │   ├── login.html           # Login page
@@ -196,7 +196,7 @@ Copy `.env.example` to `.env`:
 
 ```
 DB_HOST=localhost
-DB_NAME=barrio_support
+DB_NAME=else_inventory
 DB_USER=your_db_user
 DB_PASS=your_db_password
 SETUP_TOKEN=<long_random_string>
@@ -206,16 +206,16 @@ SETUP_TOKEN=<long_random_string>
 
 Fresh install:
 ```bash
-mysql -u your_db_user -p barrio_support < schema.sql
+mysql -u your_db_user -p else_inventory < schema.sql
 ```
 
 Upgrading an existing installation — apply migrations in order:
 ```bash
-mysql -u your_db_user -p barrio_support < migrate_departments.sql
-mysql -u your_db_user -p barrio_support < migrate_artists.sql
-mysql -u your_db_user -p barrio_support < migrate_orders.sql
-mysql -u your_db_user -p barrio_support < migrate_person_checkout.sql
-mysql -u your_db_user -p barrio_support < migrate_borrow_restrictions.sql
+mysql -u your_db_user -p else_inventory < migrate_departments.sql
+mysql -u your_db_user -p else_inventory < migrate_artists.sql
+mysql -u your_db_user -p else_inventory < migrate_orders.sql
+mysql -u your_db_user -p else_inventory < migrate_person_checkout.sql
+mysql -u your_db_user -p else_inventory < migrate_borrow_restrictions.sql
 ```
 
 ### 3. Set the document root

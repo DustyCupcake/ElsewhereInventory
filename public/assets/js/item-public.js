@@ -32,7 +32,7 @@ function renderWithData() {
   if (!_data) return; // still loading
   const i = (key) => t('item', key);
 
-  document.title = `${i('pageTitle')} — Barrio Support`;
+  document.title = `${i('pageTitle')} — Elsewhere Inventory`;
 
   if (!_data.found) {
     wrap.innerHTML = `

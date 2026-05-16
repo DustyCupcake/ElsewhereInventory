@@ -1,6 +1,6 @@
 -- Barrio Support — database schema
 -- MySQL 5.7+ / MariaDB 10.3+
--- Import via phpMyAdmin or: mysql -u user -p barrio_support < schema.sql
+-- Import via phpMyAdmin or: mysql -u user -p else_inventory < schema.sql
 --
 -- This file reflects the complete current schema including all migrations.
 -- For upgrading an existing database, run the migrate_*.sql files instead.
