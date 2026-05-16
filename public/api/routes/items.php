@@ -10,18 +10,30 @@ function handle_lookup(): void {
 
     $stmt = db()->prepare(
         'SELECT i.id, i.qr_code, i.status, i.notes, i.equipment_type_id,
-                t.name AS type_name, t.category, t.secure_qr,
+                i.dept_label, i.current_dept_id, i.current_barrio_id, i.current_artist_id, i.current_person_id,
+                t.name AS type_name, t.category, t.secure_qr, t.borrowable,
                 b.id AS barrio_id, b.name AS barrio_name,
+                d.id AS dept_id, d.name AS dept_name,
+                a.id AS artist_id, a.name AS artist_name,
+                p.id AS person_id, p.display_name AS person_name,
                 CONCAT(t.name, " #", i.item_number) AS display_name
          FROM equipment_items i
          JOIN equipment_types t ON t.id = i.equipment_type_id
          LEFT JOIN barrios b ON b.id = i.current_barrio_id
+         LEFT JOIN departments d ON d.id = i.current_dept_id
+         LEFT JOIN artists a ON a.id = i.current_artist_id
+         LEFT JOIN users p ON p.id = i.current_person_id
          WHERE i.qr_code = ?'
     );
     $stmt->execute([$qr]);
     $item = $stmt->fetch();
 
     if (!$item) json_error('Item not found', 404);
+
+    $borrowable = (bool)($item['borrowable'] ?? false);
+    $eligibility = $borrowable
+        ? check_borrow_eligible((int)$item['id'], (int)$item['equipment_type_id'])
+        : ['eligible' => false, 'reason' => 'not_borrowable'];
 
     json_ok([
         'id'                => (int)$item['id'],
@@ -31,9 +43,22 @@ function handle_lookup(): void {
         'status'            => $item['status'],
         'secure_qr'         => (bool)$item['secure_qr'],
         'equipment_type_id' => (int)$item['equipment_type_id'],
-        'current_barrio' => $item['barrio_id']
+        'dept_label'        => $item['dept_label'],
+        'current_dept'      => $item['dept_id']
+            ? ['id' => (int)$item['dept_id'], 'name' => $item['dept_name']]
+            : null,
+        'current_barrio'    => $item['barrio_id']
             ? ['id' => (int)$item['barrio_id'], 'name' => $item['barrio_name']]
             : null,
+        'current_artist'    => $item['artist_id']
+            ? ['id' => (int)$item['artist_id'], 'name' => $item['artist_name']]
+            : null,
+        'current_person'    => $item['person_id']
+            ? ['id' => (int)$item['person_id'], 'name' => $item['person_name']]
+            : null,
+        'borrowable'        => $borrowable,
+        'borrow_eligible'   => $eligibility['eligible'],
+        'borrow_reason'     => $eligibility['reason'],
     ]);
 }
 
@@ -52,13 +77,17 @@ function handle_inventory(): void {
     }
 
     $rows = db()->prepare(
-        "SELECT i.id, i.qr_code, i.status,
+        "SELECT i.id, i.qr_code, i.status, i.dept_label,
                 CONCAT(t.name, ' #', i.item_number) AS name,
                 t.category,
-                b.name AS current_barrio
+                d.name AS current_dept,
+                b.name AS current_barrio,
+                a.name AS current_artist
          FROM equipment_items i
          JOIN equipment_types t ON t.id = i.equipment_type_id
+         LEFT JOIN departments d ON d.id = i.current_dept_id
          LEFT JOIN barrios b ON b.id = i.current_barrio_id
+         LEFT JOIN artists a ON a.id = i.current_artist_id
          $where
          ORDER BY t.name, i.item_number"
     );

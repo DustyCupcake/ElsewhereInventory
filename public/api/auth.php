@@ -1,12 +1,47 @@
 <?php
 declare(strict_types=1);
 
-// Call require_auth() at the top of any route that needs a logged-in user.
-// Call require_admin() for admin-only routes.
+// ─── Default permission sets per base role ────────────────────────────────────
+const ROLE_PERMISSIONS = [
+    'production_admin' => [
+        'validate_vouchers','checkout_equipment','checkin_equipment',
+        'sub_checkout','sub_checkin',
+        'view_inventory','view_dept_inventory',
+        'view_barrios','view_artists',
+        'manage_barrios','manage_artists',
+        'manage_equipment','manage_consumables',
+        'manage_users','manage_departments',
+        'create_invites','manage_orders','submit_orders',
+        'label_equipment','manage_shifts',
+    ],
+    'production_staff' => [
+        'checkout_equipment','checkin_equipment',
+        'view_inventory','view_barrios','view_artists',
+        'validate_vouchers',
+    ],
+    'dept_admin' => [
+        'sub_checkout','sub_checkin',
+        'view_dept_inventory',
+        'create_invites','submit_orders','label_equipment',
+    ],
+    'dept_staff' => [
+        'view_dept_inventory','submit_orders',
+    ],
+    // Legacy aliases — mapped before permission resolution
+    'admin'     => [],
+    'staff'     => [],
+    'validator' => [],
+];
+
+// ─── Per-dept permissions added based on sub_entity ───────────────────────────
+const SUB_ENTITY_PERMISSIONS = [
+    'barrio' => ['view_barrios','manage_barrios','sub_checkout','sub_checkin','label_equipment'],
+    'artist' => ['view_artists','manage_artists','sub_checkout','sub_checkin','label_equipment'],
+];
 
 function start_session(): void {
     if (session_status() === PHP_SESSION_NONE) {
-        $lifetime = 3600 * 24 * 3; // 3 days
+        $lifetime = 3600 * 24 * 3;
         ini_set('session.gc_maxlifetime', (string) $lifetime);
         $sessionPath = dirname(__DIR__, 2) . '/sessions';
         if (!is_dir($sessionPath)) {
@@ -26,33 +61,181 @@ function start_session(): void {
 
 function require_auth(): array {
     start_session();
-    if (empty($_SESSION['user_id'])) {
+    if (empty($_SESSION['user_id']) && empty($_SESSION['is_shift'])) {
         json_error('Unauthorized', 401);
     }
-    return [
-        'id'           => $_SESSION['user_id'],
-        'username'     => $_SESSION['username'],
-        'display_name' => $_SESSION['display_name'],
-        'role'         => $_SESSION['role'],
-        'language'     => $_SESSION['language'] ?? 'en',
-    ];
+    return $_SESSION['_auth_cache'] ?? _build_auth_return();
 }
 
-function require_admin(): array {
+function _build_auth_return(): array {
+    $data = [
+        'id'                 => $_SESSION['user_id'] ?? null,
+        'username'           => $_SESSION['username'] ?? null,
+        'display_name'       => $_SESSION['display_name'] ?? '',
+        'role'               => $_SESSION['role'] ?? null,
+        'dept_ids'           => $_SESSION['dept_ids'] ?? [],
+        'dept_roles'         => $_SESSION['dept_roles'] ?? [],
+        'dept_sub_entities'  => $_SESSION['dept_sub_entities'] ?? (object)[],
+        'permissions'        => $_SESSION['permissions'] ?? [],
+        'language'           => $_SESSION['language'] ?? 'en',
+        'is_shift'           => $_SESSION['is_shift'] ?? false,
+        'shift_id'           => $_SESSION['shift_id'] ?? null,
+        'shift_name'         => $_SESSION['shift_name'] ?? null,
+        'qr_token'           => $_SESSION['qr_token'] ?? null,
+    ];
+    $_SESSION['_auth_cache'] = $data;
+    return $data;
+}
+
+// Generate a QR token for a user if they don't have one yet
+function ensure_user_qr_token(int $user_id): string {
+    $row = db()->prepare('SELECT qr_token FROM users WHERE id = ?')->execute([$user_id])->fetch();
+    if (!empty($row['qr_token'])) return $row['qr_token'];
+    $token = bin2hex(random_bytes(16));
+    db()->prepare('UPDATE users SET qr_token = ? WHERE id = ?')->execute([$token, $user_id]);
+    return $token;
+}
+
+function has_permission(string $perm): bool {
+    start_session();
+    return in_array($perm, $_SESSION['permissions'] ?? [], true);
+}
+
+function require_permission(string $perm): array {
     $user = require_auth();
-    if ($user['role'] !== 'admin') {
+    if (!has_permission($perm)) {
         json_error('Forbidden', 403);
     }
     return $user;
+}
+
+// ─── Convenience gate functions ───────────────────────────────────────────────
+
+function require_production_admin(): array {
+    return require_permission('manage_departments');
+}
+
+function require_any_staff(): array {
+    return require_auth();  // any authenticated session (user or shift) is valid here
+}
+
+function require_dept_access(int $dept_id): array {
+    $user = require_auth();
+    if (in_array('view_inventory', $user['permissions'], true)) return $user; // production level
+    if (in_array($dept_id, $user['dept_ids'] ?? [], true)) return $user;
+    json_error('Forbidden', 403);
+}
+
+// ─── Backward-compat aliases (keep existing route files working) ───────────────
+function require_admin(): array {
+    return require_permission('manage_users');
 }
 
 function require_staff_or_admin(): array {
-    $user = require_auth();
-    if (!in_array($user['role'], ['admin', 'staff'], true)) {
-        json_error('Forbidden', 403);
-    }
-    return $user;
+    return require_auth();
 }
+
+// ─── Permission computation (called at login) ─────────────────────────────────
+
+function compute_permissions(string $base_role, array $dept_memberships, array $perm_overrides): array {
+    // Resolve legacy roles
+    $effective_role = match($base_role) {
+        'admin'     => 'production_admin',
+        'staff'     => 'production_staff',
+        'validator' => 'dept_staff',
+        default     => $base_role,
+    };
+
+    $perms = ROLE_PERMISSIONS[$effective_role] ?? [];
+
+    // For dept-level roles, add permissions based on sub_entity of their departments
+    if (in_array($effective_role, ['dept_admin', 'dept_staff'], true)) {
+        foreach ($dept_memberships as $m) {
+            $dept_role = $m['role'];    // dept_admin or dept_staff
+            $sub_entity = $m['sub_entity'] ?? 'none';
+            $extra = SUB_ENTITY_PERMISSIONS[$sub_entity] ?? [];
+
+            // dept_staff in sub-lending depts get sub_checkout/sub_checkin/label_equipment
+            foreach ($extra as $p) {
+                $perms[] = $p;
+            }
+
+            // dept_admin also gets manage_* for their sub-entity
+            if ($dept_role === 'dept_admin') {
+                $perms[] = 'create_invites';
+            }
+        }
+    }
+
+    // Apply per-user overrides
+    foreach ($perm_overrides as $o) {
+        if ($o['granted']) {
+            $perms[] = $o['permission'];
+        } else {
+            $perms = array_diff($perms, [$o['permission']]);
+        }
+    }
+
+    return array_values(array_unique($perms));
+}
+
+// Check if the current session user is eligible to borrow a specific item.
+// Returns ['eligible' => bool, 'reason' => string|null]
+function check_borrow_eligible(int $item_id, int $type_id): array {
+    start_session();
+
+    // Production admin bypasses all restrictions
+    if (has_permission('manage_equipment')) {
+        return ['eligible' => true, 'reason' => null];
+    }
+
+    $user_id   = $_SESSION['user_id']  ?? null;
+    $dept_ids  = $_SESSION['dept_ids'] ?? [];
+    $is_shift  = $_SESSION['is_shift'] ?? false;
+
+    // Shift sessions cannot borrow personal equipment
+    if ($is_shift || !$user_id) {
+        return ['eligible' => false, 'reason' => 'shift_session'];
+    }
+
+    // Check item-level rules first (more specific than type rules)
+    $item_rules = db()->prepare(
+        'SELECT allowed_dept_id, allowed_user_id FROM equipment_borrow_rules WHERE item_id = ?'
+    )->execute([$item_id])->fetchAll();
+
+    if ($item_rules) {
+        return _matches_rules($item_rules, (int)$user_id, $dept_ids);
+    }
+
+    // Check type-level rules
+    $type_rules = db()->prepare(
+        'SELECT allowed_dept_id, allowed_user_id FROM equipment_borrow_rules WHERE equipment_type_id = ?'
+    )->execute([$type_id])->fetchAll();
+
+    if ($type_rules) {
+        return _matches_rules($type_rules, (int)$user_id, $dept_ids);
+    }
+
+    // No rules: anyone with person_checkout permission can borrow
+    $can_checkout = has_permission('checkout_equipment') || has_permission('sub_checkout');
+    return $can_checkout
+        ? ['eligible' => true,  'reason' => null]
+        : ['eligible' => false, 'reason' => 'no_permission'];
+}
+
+function _matches_rules(array $rules, int $user_id, array $dept_ids): array {
+    foreach ($rules as $r) {
+        if ($r['allowed_user_id'] && (int)$r['allowed_user_id'] === $user_id) {
+            return ['eligible' => true, 'reason' => null];
+        }
+        if ($r['allowed_dept_id'] && in_array((int)$r['allowed_dept_id'], $dept_ids, true)) {
+            return ['eligible' => true, 'reason' => null];
+        }
+    }
+    return ['eligible' => false, 'reason' => 'restricted'];
+}
+
+// ─── CSRF ─────────────────────────────────────────────────────────────────────
 
 function csrf_token(): string {
     start_session();

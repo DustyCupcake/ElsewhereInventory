@@ -41,32 +41,59 @@ $method = $_SERVER['REQUEST_METHOD'];
 // Route table
 $routes = [
     // Auth
-    ['POST', '/auth/register', 'routes/auth.php',              'handle_register'],
-    ['POST', '/auth/login',    'routes/auth.php',              'handle_login'],
-    ['POST', '/auth/logout',   'routes/auth.php',              'handle_logout'],
-    ['GET',  '/auth/me',       'routes/auth.php',              'handle_me'],
-    ['GET',  '/auth/csrf',     'routes/auth.php',              'handle_csrf'],
-    ['POST', '/auth/language', 'routes/auth.php',              'handle_language'],
+    ['POST', '/auth/register',       'routes/auth.php', 'handle_register'],
+    ['POST', '/auth/login',          'routes/auth.php', 'handle_login'],
+    ['POST', '/auth/logout',         'routes/auth.php', 'handle_logout'],
+    ['GET',  '/auth/me',             'routes/auth.php', 'handle_me'],
+    ['GET',  '/auth/csrf',           'routes/auth.php', 'handle_csrf'],
+    ['POST', '/auth/language',       'routes/auth.php', 'handle_language'],
+    ['GET',  '/auth/invite-info',    'routes/auth.php', 'handle_invite_info'],
+    ['GET',  '/auth/shift-info',     'routes/auth.php', 'handle_shift_info'],
+    ['POST', '/auth/shift-login',    'routes/auth.php', 'handle_shift_login'],
 
-    // Staff
-    ['GET',  '/camps',                  'routes/camps.php',         'handle_camps'],
-    ['GET',  '/items/lookup',           'routes/items.php',         'handle_lookup'],
-    ['GET',  '/inventory',              'routes/items.php',         'handle_inventory'],
-    ['POST', '/checkout',               'routes/transactions.php',  'handle_checkout'],
-    ['POST', '/checkin',                'routes/transactions.php',  'handle_checkin'],
-    ['POST', '/items/use',              'routes/transactions.php',  'handle_used'],
-    ['POST', '/items/activate',         'routes/transactions.php',  'handle_activate'],
-    ['POST', '/items/fill-confirm',     'routes/transactions.php',  'handle_fill_confirm'],
-    ['GET',  '/voucher/status',         'routes/voucher.php',       'handle_voucher_status'],
-    ['GET',  '/item/info',              'routes/item_public.php',   'handle_item_info'],
-    ['GET',  '/history',                'routes/history.php',       'handle_history'],
-    ['POST', '/sync/offline-queue',     'routes/sync.php',          'handle_sync'],
+    // Staff — inventory & equipment ops
+    ['GET',  '/camps',               'routes/camps.php',        'handle_camps'],
+    ['GET',  '/items/lookup',        'routes/items.php',        'handle_lookup'],
+    ['GET',  '/inventory',           'routes/items.php',        'handle_inventory'],
+    ['POST', '/checkout',            'routes/transactions.php', 'handle_checkout'],
+    ['POST', '/sub-checkout',        'routes/transactions.php', 'handle_sub_checkout'],
+    ['POST', '/checkin',             'routes/transactions.php', 'handle_checkin'],
+    ['PUT',  '/items/label',         'routes/transactions.php', 'handle_set_label'],
+    ['POST', '/items/use',           'routes/transactions.php', 'handle_used'],
+    ['POST', '/items/activate',      'routes/transactions.php', 'handle_activate'],
+    ['POST', '/items/fill-confirm',  'routes/transactions.php', 'handle_fill_confirm'],
 
-    // Barrio lifecycle (arrival / departure)
-    ['GET',  '/barrios',          'routes/barrios.php', 'handle_list_barrios'],
-    ['GET',  '/barrios/:id',      'routes/barrios.php', 'handle_get_barrio'],
-    ['POST', '/barrio-arrival',   'routes/barrios.php', 'handle_barrio_arrival'],
-    ['POST', '/barrio-departure', 'routes/barrios.php', 'handle_barrio_departure'],
+    // Public
+    ['GET',  '/voucher/status',      'routes/voucher.php',      'handle_voucher_status'],
+    ['GET',  '/item/info',           'routes/item_public.php',  'handle_item_info'],
+
+    // Persons
+    ['GET',  '/person-info',         'routes/persons.php',      'handle_person_info'],
+    ['GET',  '/persons',             'routes/persons.php',      'handle_person_search'],
+    ['POST', '/person-checkout',     'routes/transactions.php', 'handle_person_checkout'],
+    ['POST', '/sub-person-checkout', 'routes/transactions.php', 'handle_sub_person_checkout'],
+
+    // History & sync
+    ['GET',  '/history',             'routes/history.php',      'handle_history'],
+    ['POST', '/sync/offline-queue',  'routes/sync.php',         'handle_sync'],
+
+    // Departments
+    ['GET',  '/departments',         'routes/departments.php',  'handle_list_departments'],
+    ['GET',  '/departments/:id',     'routes/departments.php',  'handle_get_department'],
+
+    // Artists
+    ['GET',  '/artists',             'routes/artists.php',      'handle_list_artists'],
+    ['GET',  '/artists/:id',         'routes/artists.php',      'handle_get_artist'],
+
+    // Dept equipment orders
+    ['GET',  '/dept-orders',         'routes/orders.php',       'handle_get_dept_orders'],
+    ['PUT',  '/dept-orders',         'routes/orders.php',       'handle_save_dept_orders'],
+
+    // Barrio lifecycle
+    ['GET',  '/barrios',             'routes/barrios.php',      'handle_list_barrios'],
+    ['GET',  '/barrios/:id',         'routes/barrios.php',      'handle_get_barrio'],
+    ['POST', '/barrio-arrival',      'routes/barrios.php',      'handle_barrio_arrival'],
+    ['POST', '/barrio-departure',    'routes/barrios.php',      'handle_barrio_departure'],
 
     // Consumables & entitlements
     ['GET',    '/consumable-types',              'routes/consumables.php', 'handle_list_consumable_types'],
@@ -79,30 +106,64 @@ $routes = [
     ['PUT',    '/admin/barrio-equipment-orders', 'routes/consumables.php', 'handle_admin_equipment_orders'],
     ['POST',   '/admin/barrios/import-csv',      'routes/consumables.php', 'handle_import_csv'],
 
+    // Admin — departments
+    ['GET',    '/admin/departments',             'routes/admin/departments.php', 'handle_list_departments_admin'],
+    ['POST',   '/admin/departments',             'routes/admin/departments.php', 'handle_create_department'],
+    ['PUT',    '/admin/departments',             'routes/admin/departments.php', 'handle_update_department'],
+    ['DELETE', '/admin/departments',             'routes/admin/departments.php', 'handle_delete_department'],
+    ['GET',    '/admin/dept-members',            'routes/admin/departments.php', 'handle_dept_members'],
+    ['PUT',    '/admin/dept-roles',              'routes/admin/departments.php', 'handle_set_dept_role'],
+
+    // Admin — dept orders aggregate
+    ['GET',    '/admin/dept-orders',             'routes/orders.php',            'handle_all_dept_orders'],
+    ['GET',    '/admin/barrio-orders-aggregate', 'routes/orders.php',            'handle_barrio_orders_aggregate'],
+
+    // Admin — artists
+    ['GET',    '/admin/artists',                 'routes/admin/artists.php',     'handle_list_artists_admin'],
+    ['POST',   '/admin/artists',                 'routes/admin/artists.php',     'handle_create_artist'],
+    ['PUT',    '/admin/artists',                 'routes/admin/artists.php',     'handle_update_artist'],
+    ['DELETE', '/admin/artists',                 'routes/admin/artists.php',     'handle_delete_artist'],
+    ['POST',   '/admin/artists/import-csv',      'routes/admin/artists.php',     'handle_import_artists_csv'],
+
     // Admin — barrios
-    ['GET',    '/admin/barrios',        'routes/admin/barrios.php', 'handle_list'],
-    ['POST',   '/admin/barrios',        'routes/admin/barrios.php', 'handle_create'],
-    ['PUT',    '/admin/barrios',        'routes/admin/barrios.php', 'handle_update'],
-    ['DELETE', '/admin/barrios',        'routes/admin/barrios.php', 'handle_delete'],
+    ['GET',    '/admin/barrios',                 'routes/admin/barrios.php',     'handle_list'],
+    ['POST',   '/admin/barrios',                 'routes/admin/barrios.php',     'handle_create'],
+    ['PUT',    '/admin/barrios',                 'routes/admin/barrios.php',     'handle_update'],
+    ['DELETE', '/admin/barrios',                 'routes/admin/barrios.php',     'handle_delete'],
+
+    // Admin — shifts
+    ['GET',    '/admin/shifts',                  'routes/admin/shifts.php',      'handle_list_shifts'],
+    ['POST',   '/admin/shifts',                  'routes/admin/shifts.php',      'handle_create_shift'],
+    ['PUT',    '/admin/shifts',                  'routes/admin/shifts.php',      'handle_update_shift'],
+    ['DELETE', '/admin/shifts',                  'routes/admin/shifts.php',      'handle_delete_shift'],
+    ['POST',   '/admin/shifts/tokens',           'routes/admin/shifts.php',      'handle_create_shift_tokens'],
+    ['GET',    '/admin/shifts/tokens',           'routes/admin/shifts.php',      'handle_list_shift_tokens'],
+    ['GET',    '/admin/shifts/qr-sheet',         'routes/admin/shifts.php',      'handle_shift_qr_sheet'],
+
+    // Admin — invite tokens
+    ['GET',    '/admin/invite-tokens',           'routes/admin/invite.php',      'handle_list_invites'],
+    ['POST',   '/admin/invite-tokens',           'routes/admin/invite.php',      'handle_create_invite'],
+    ['DELETE', '/admin/invite-tokens',           'routes/admin/invite.php',      'handle_revoke_invite'],
 
     // Admin — equipment types & items
-    ['GET',    '/admin/equipment-types',        'routes/admin/equipment.php', 'handle_list_types'],
-    ['POST',   '/admin/equipment-types',        'routes/admin/equipment.php', 'handle_create_type'],
-    ['PUT',    '/admin/equipment-types',        'routes/admin/equipment.php', 'handle_update_type'],
-    ['DELETE', '/admin/equipment-types',        'routes/admin/equipment.php', 'handle_delete_type'],
-    ['GET',    '/admin/items',                  'routes/admin/equipment.php', 'handle_list_items'],
-    ['POST',   '/admin/items',                  'routes/admin/equipment.php', 'handle_create_items'],
-    ['PUT',    '/admin/items',                  'routes/admin/equipment.php', 'handle_update_item'],
-    ['DELETE', '/admin/items',                  'routes/admin/equipment.php', 'handle_delete_item'],
-    ['GET',    '/admin/items/qr-sheet',         'routes/admin/qr_sheet.php',  'handle_qr_sheet'],
-    ['GET',    '/admin/barrio-qr',             'routes/admin/barrio_qr.php', 'handle_barrio_qr'],
+    ['GET',    '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_list_types'],
+    ['POST',   '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_create_type'],
+    ['PUT',    '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_update_type'],
+    ['DELETE', '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_delete_type'],
+    ['GET',    '/admin/items',                   'routes/admin/equipment.php',   'handle_list_items'],
+    ['POST',   '/admin/items',                   'routes/admin/equipment.php',   'handle_create_items'],
+    ['PUT',    '/admin/items',                   'routes/admin/equipment.php',   'handle_update_item'],
+    ['DELETE', '/admin/items',                   'routes/admin/equipment.php',   'handle_delete_item'],
+    ['GET',    '/admin/items/qr-sheet',          'routes/admin/qr_sheet.php',    'handle_qr_sheet'],
+    ['GET',    '/admin/barrio-qr',               'routes/admin/barrio_qr.php',   'handle_barrio_qr'],
 
     // Admin — users
-    ['GET',    '/admin/users',                  'routes/admin/users.php', 'handle_list'],
-    ['POST',   '/admin/users',                  'routes/admin/users.php', 'handle_create'],
-    ['PUT',    '/admin/users',                  'routes/admin/users.php', 'handle_update'],
-    ['DELETE', '/admin/users',                  'routes/admin/users.php', 'handle_delete'],
-    ['POST',   '/admin/users/reset-password',   'routes/admin/users.php', 'handle_reset_password'],
+    ['GET',    '/admin/users',                   'routes/admin/users.php',       'handle_list'],
+    ['POST',   '/admin/users',                   'routes/admin/users.php',       'handle_create'],
+    ['PUT',    '/admin/users',                   'routes/admin/users.php',       'handle_update'],
+    ['DELETE', '/admin/users',                   'routes/admin/users.php',       'handle_delete'],
+    ['POST',   '/admin/users/reset-password',    'routes/admin/users.php',       'handle_reset_password'],
+    ['GET',    '/admin/users/qr-sheet',          'routes/admin/users.php',       'handle_user_qr_sheet'],
 ];
 
 $matched = false;

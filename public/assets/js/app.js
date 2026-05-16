@@ -11,6 +11,7 @@ import { init as initBarrios, destroy as destroyBarrios } from './barrios.js?v=1
 import { init as initInventory } from './inventory.js?v=1.0.0';
 import { init as initHistory } from './history.js?v=1.0.0';
 import { init as initValidate, destroy as destroyValidate } from './validate.js?v=1.0.1';
+import { init as initOrders } from './order-form.js?v=1.0.0';
 import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.0';
 
 if ('serviceWorker' in navigator) {
@@ -23,6 +24,8 @@ initLang();
 let currentTab     = null;
 let toastTimer     = null;
 let _currentUser   = null;
+
+export function getCurrentUser() { return _currentUser; }
 
 export function toast(msg, duration = 3000) {
   const el = document.getElementById('toast');
@@ -77,13 +80,22 @@ async function boot() {
   if (userEl) userEl.textContent = user.display_name;
 
   const adminLink = document.getElementById('admin-link');
-  if (adminLink && user.role === 'admin') adminLink.style.display = '';
+  if (adminLink && (user.role === 'production_admin' || user.role === 'admin')) adminLink.style.display = '';
 
-  // Validator gets a stripped-down single-mode view
-  if (user.role === 'validator') {
+  // Shift sessions with validate_vouchers permission and no sub_checkout
+  // get a stripped-down single-mode validator view
+  const perms = user.permissions || [];
+  const isValidatorOnly = (user.role === 'validator' || user.is_shift) &&
+    perms.includes('validate_vouchers') &&
+    !perms.includes('checkout_equipment') &&
+    !perms.includes('sub_checkout');
+  if (isValidatorOnly) {
     bootValidator();
     return;
   }
+
+  // Show/hide nav tabs based on permissions
+  configureNavTabs(perms);
 
   // Init offline sync
   initOfflineSync(toast);
@@ -99,8 +111,43 @@ async function boot() {
     window.location.href = '/login.html';
   });
 
-  const barrioId = new URLSearchParams(location.search).get('barrio') || null;
-  switchTab('checkout', barrioId);
+  const params   = new URLSearchParams(location.search);
+  const barrioId = params.get('barrio') || null;
+  const personQr = params.get('person') || null;
+
+  if (personQr) {
+    // Resolve person info, set global, then re-init checkout so it pre-selects them
+    get('/person-info', { qr: personQr }).then(data => {
+      if (data?.person) {
+        window._pendingPersonQr = personQr;
+        window._pendingPerson   = data.person;
+      }
+      switchTab('checkout', null);
+    }).catch(() => switchTab('checkout', null));
+  } else {
+    switchTab('checkout', barrioId);
+  }
+}
+
+function configureNavTabs(perms) {
+  const canLend     = perms.includes('checkout_equipment') || perms.includes('sub_checkout');
+  const canCheckin  = perms.includes('checkin_equipment')  || perms.includes('sub_checkin');
+  const canBarrios  = perms.includes('view_barrios');
+  const canOrders   = perms.includes('submit_orders')      || perms.includes('manage_orders');
+
+  const tabVisibility = {
+    checkout:  canLend,
+    checkin:   canCheckin,
+    barrios:   canBarrios,
+    inventory: true,  // anyone with an account sees inventory
+    history:   true,
+    orders:    canOrders,
+  };
+
+  document.querySelectorAll('nav button[data-tab]').forEach(btn => {
+    const show = tabVisibility[btn.dataset.tab] ?? true;
+    btn.style.display = show ? '' : 'none';
+  });
 }
 
 function bootValidator() {
@@ -143,6 +190,7 @@ function rerenderCurrentTab() {
     case 'barrios':   initBarrios(panel, null);    break;
     case 'inventory': initInventory(panel);        break;
     case 'history':   initHistory(panel);          break;
+    case 'orders':    initOrders(panel);           break;
     case 'validate':  initValidate(panel, true);   break;
   }
 }
@@ -174,6 +222,7 @@ export function switchTab(name, extra = null) {
     case 'barrios':   initBarrios(panel, extra);    break;
     case 'inventory': initInventory(panel);         break;
     case 'history':   initHistory(panel);           break;
+    case 'orders':    initOrders(panel);            break;
     case 'validate':  initValidate(panel, true);    break;
   }
 }
