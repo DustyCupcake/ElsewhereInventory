@@ -3,15 +3,30 @@ declare(strict_types=1);
 
 function handle_list_barrios(): void {
     require_method('GET');
-    require_auth();
+    $user = require_auth();
 
-    $rows = db()->query(
-        'SELECT b.*,
+    // Production level: see all barrios (optionally filter by dept)
+    // Dept level with view_barrios: see only their dept's barrios
+    if (has_permission('view_inventory')) {
+        $where  = isset($_GET['dept_id']) ? 'WHERE b.dept_id = ?' : '';
+        $params = isset($_GET['dept_id']) ? [(int)$_GET['dept_id']] : [];
+    } elseif (has_permission('view_barrios')) {
+        $placeholders = implode(',', array_fill(0, count($user['dept_ids']), '?'));
+        $where        = $placeholders ? "WHERE b.dept_id IN ($placeholders)" : 'WHERE 1=0';
+        $params       = $user['dept_ids'];
+    } else {
+        json_error('Forbidden', 403);
+        return;
+    }
+
+    $rows = db()->prepare(
+        "SELECT b.*,
             (SELECT COUNT(*) FROM equipment_items e
-             WHERE e.current_barrio_id = b.id AND e.status = \'checked-out\') AS items_out_count
+             WHERE e.current_barrio_id = b.id) AS items_out_count
          FROM barrios b
-         ORDER BY b.sort_order, b.name'
-    )->fetchAll();
+         $where
+         ORDER BY b.sort_order, b.name"
+    )->execute($params)->fetchAll();
 
     foreach ($rows as &$r) {
         $r['id']               = (int)$r['id'];
@@ -107,7 +122,7 @@ function handle_get_barrio(): void {
 
 function handle_barrio_arrival(): void {
     require_method('POST');
-    $user = require_auth();
+    $user = require_permission('manage_barrios');
     verify_csrf();
 
     $b         = body();
@@ -199,7 +214,7 @@ function handle_barrio_arrival(): void {
 
 function handle_barrio_departure(): void {
     require_method('POST');
-    $user = require_auth();
+    $user = require_permission('manage_barrios');
     verify_csrf();
 
     $b         = body();

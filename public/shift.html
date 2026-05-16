@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Shift Check-in</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.0">
+<style>
+  body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1rem; }
+  .box { width:100%; max-width:360px; }
+  .logo { text-align:center; font-size:22px; margin-bottom:1.75rem; }
+  .logo span { color:var(--accent); }
+  .box .card { padding:1.5rem; }
+  .shift-info { background:var(--surface2); border-radius:var(--radius); padding:.75rem 1rem;
+                margin-bottom:1.25rem; }
+  .shift-name { font-size:17px; font-weight:600; margin-bottom:.2rem; }
+  .shift-dept { font-size:13px; color:var(--text2); }
+  .shift-time { font-size:12px; color:var(--text3); margin-top:.2rem; }
+  .error-msg  { font-size:13px; color:var(--danger); margin-bottom:.5rem; display:none; }
+  .status-msg { text-align:center; padding:1rem 0; }
+  .status-icon { font-size:2.5rem; margin-bottom:.5rem; }
+  .status-text { font-size:14px; color:var(--text2); line-height:1.5; }
+  .btn { margin-top:.75rem; }
+  [data-view] { display:none; }
+  [data-view].active { display:block; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3);
+             border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">Barrio <span>Support</span></div>
+  <div class="card">
+
+    <!-- Loading -->
+    <div data-view="loading" class="active">
+      <div class="status-msg">
+        <div class="status-icon">⏳</div>
+        <div class="status-text">Checking shift…</div>
+      </div>
+    </div>
+
+    <!-- Error states -->
+    <div data-view="error">
+      <div class="status-msg">
+        <div class="status-icon" style="color:var(--danger)">✕</div>
+        <div class="status-text" id="error-msg">This shift code is not valid.</div>
+      </div>
+    </div>
+
+    <!-- Name entry -->
+    <div data-view="name-entry">
+      <div class="shift-info">
+        <div class="shift-name" id="shift-name"></div>
+        <div class="shift-dept" id="shift-dept"></div>
+        <div class="shift-time" id="shift-time"></div>
+      </div>
+      <div id="name-error" class="error-msg"></div>
+      <div class="field">
+        <label for="volunteer-name">Your name</label>
+        <input type="text" id="volunteer-name" autocomplete="given-name" placeholder="Enter your name">
+      </div>
+      <button class="btn primary" id="start-btn" onclick="doShiftLogin()">Start shift</button>
+    </div>
+
+    <!-- Success -->
+    <div data-view="success">
+      <div class="status-msg">
+        <div class="status-icon" style="color:var(--accent)">✓</div>
+        <div class="status-text" id="success-msg">Shift started! Redirecting…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+
+function showView(name) {
+  document.querySelectorAll('[data-view]').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-view="${name}"]`).classList.add('active');
+}
+
+function fmtTime(dt) {
+  if (!dt) return '';
+  const d = new Date(dt.replace(' ', 'T'));
+  return d.toLocaleString([], { weekday:'short', month:'short', day:'numeric',
+                                hour:'2-digit', minute:'2-digit' });
+}
+
+(async () => {
+  if (!token) {
+    document.getElementById('error-msg').textContent = 'No shift code in URL.';
+    showView('error'); return;
+  }
+
+  try {
+    const resp = await fetch('/api/auth/shift-info?token=' + encodeURIComponent(token), { credentials: 'include' });
+    const data = await resp.json();
+
+    if (!data.valid) {
+      const msgs = {
+        not_found:   'This shift code does not exist.',
+        not_started: `This shift starts at ${fmtTime(data.active_from)}.`,
+        ended:       `This shift ended at ${fmtTime(data.active_until)}.`,
+      };
+      document.getElementById('error-msg').textContent = msgs[data.reason] || 'Shift code not valid.';
+      showView('error'); return;
+    }
+
+    document.getElementById('shift-name').textContent = data.shift_name;
+    document.getElementById('shift-dept').textContent = data.dept_name || '';
+    document.getElementById('shift-time').textContent =
+      fmtTime(data.active_from) + ' – ' + fmtTime(data.active_until);
+    showView('name-entry');
+    setTimeout(() => document.getElementById('volunteer-name').focus(), 100);
+  } catch {
+    document.getElementById('error-msg').textContent = 'Network error. Please try again.';
+    showView('error');
+  }
+})();
+
+async function doShiftLogin() {
+  const name   = document.getElementById('volunteer-name').value.trim();
+  const errEl  = document.getElementById('name-error');
+  const btn    = document.getElementById('start-btn');
+
+  errEl.style.display = 'none';
+  if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
+
+  try {
+    const resp = await fetch('/api/auth/shift-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ token, volunteer_name: name }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      errEl.textContent = data.error || 'Could not start shift';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Start shift';
+      return;
+    }
+
+    document.getElementById('success-msg').textContent =
+      `Welcome, ${name}! Redirecting…`;
+    showView('success');
+    setTimeout(() => { window.location.href = '/'; }, 1200);
+  } catch {
+    errEl.textContent = 'Network error. Check connection.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Start shift';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.querySelector('[data-view="name-entry"].active')) doShiftLogin();
+});
+</script>
+</body>
+</html>
