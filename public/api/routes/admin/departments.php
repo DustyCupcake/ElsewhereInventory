@@ -6,7 +6,9 @@ function handle_list_departments_admin(): void {
     require_permission('manage_departments');
 
     $rows = db()->query(
-        'SELECT d.id, d.name, d.slug, d.sub_entity, d.sort_order, d.is_active, d.created_at,
+        'SELECT d.id, d.name,
+                IFNULL(d.qr_code, "") AS qr_code,
+                d.slug, d.sub_entity, d.sort_order, d.is_active, d.created_at,
                 COUNT(DISTINCT udr.user_id) AS member_count
          FROM departments d
          LEFT JOIN user_dept_roles udr ON udr.dept_id = d.id
@@ -46,17 +48,19 @@ function handle_create_department(): void {
         json_error('sub_entity must be barrio, artist, or none');
     }
 
+    $qr_code = bin2hex(random_bytes(12));
+
     try {
         db()->prepare(
-            'INSERT INTO departments (name, slug, sub_entity, sort_order) VALUES (?, ?, ?, ?)'
-        )->execute([$name, $slug, $sub_entity, $sort_order]);
+            'INSERT INTO departments (name, qr_code, slug, sub_entity, sort_order) VALUES (?, ?, ?, ?, ?)'
+        )->execute([$name, $qr_code, $slug, $sub_entity, $sort_order]);
         $id = (int)db()->lastInsertId();
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) json_error('Name or slug already exists', 409);
         throw $e;
     }
 
-    json_ok(['id' => $id, 'name' => $name, 'slug' => $slug, 'sub_entity' => $sub_entity], 201);
+    json_ok(['id' => $id, 'name' => $name, 'qr_code' => $qr_code, 'slug' => $slug, 'sub_entity' => $sub_entity], 201);
 }
 
 function handle_update_department(): void {
@@ -126,14 +130,16 @@ function handle_dept_members(): void {
     // Must have access to this dept
     require_dept_access($dept_id);
 
-    $rows = db()->prepare(
+    $stmt = db()->prepare(
         'SELECT u.id, u.username, u.display_name, u.role AS base_role, u.is_active,
                 udr.role AS dept_role
          FROM user_dept_roles udr
          JOIN users u ON u.id = udr.user_id
          WHERE udr.dept_id = ?
          ORDER BY u.display_name'
-    )->execute([$dept_id])->fetchAll();
+    );
+    $stmt->execute([$dept_id]);
+    $rows = $stmt->fetchAll();
 
     foreach ($rows as &$r) {
         $r['id']        = (int)$r['id'];

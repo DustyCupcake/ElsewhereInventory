@@ -43,10 +43,8 @@ function handle_qr_sheet(): void {
     $base_url = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
     foreach ($items as $item) {
-        // The QR image encodes a direct URL; the code label still shows the short code.
-        $qr_url   = $base_url . ($item['secure_qr']
-            ? '/voucher?qr=' . rawurlencode($item['qr_code'])
-            : '/item?qr='    . rawurlencode($item['qr_code']));
+        // All QR codes now point to the unified scan page.
+        $qr_url   = $base_url . '/scan?qr=' . rawurlencode($item['qr_code']);
         $qr_value = htmlspecialchars($item['qr_code'], ENT_QUOTES, 'UTF-8');
         $name_esc = htmlspecialchars($item['display_name'], ENT_QUOTES, 'UTF-8');
 

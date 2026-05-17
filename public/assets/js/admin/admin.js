@@ -7,7 +7,8 @@ import { get, setCsrf }    from '../api.js?v=1.0.1';
 import { initBarrios }     from './barrios.js?v=1.0.1';
 import { initArtists }     from './artists.js?v=1.0.0';
 import { initEquipment }   from './equipment.js?v=1.0.1';
-import { initUsers }       from './users.js?v=1.0.1';
+import { initUsers }       from './users.js?v=1.0.2';
+import { initTeams }       from './teams.js?v=1.0.0';
 import { initConsumables } from './consumables.js?v=1.0.0';
 
 let toastTimer = null;
@@ -18,8 +19,9 @@ let _perms     = [];
 const SECTION_PERMS = {
   barrios:     ['manage_barrios'],
   artists:     ['manage_artists'],
-  users:       ['manage_users', 'manage_dept_users'],
   equipment:   ['manage_equipment'],
+  users:       ['manage_users', 'manage_dept_users'],
+  teams:       ['manage_departments'],
   consumables: ['manage_consumables'],
 };
 
@@ -96,6 +98,7 @@ function navigate(section) {
     case 'artists':     initArtists(content, toast, _user);       break;
     case 'equipment':   initEquipment(content, toast);            break;
     case 'users':       initUsers(content, toast, _user);         break;
+    case 'teams':       initTeams(content, toast);                break;
     case 'consumables': initConsumables(content, toast);          break;
     default:            navigate(
       Object.keys(SECTION_PERMS).find(s => SECTION_PERMS[s].some(p => _perms.includes(p))) ?? 'barrios'

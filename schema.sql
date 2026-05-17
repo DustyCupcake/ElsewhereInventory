@@ -31,20 +31,23 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS departments (
     id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name       VARCHAR(128) NOT NULL,
+    qr_code    VARCHAR(64)  NULL,
     slug       VARCHAR(64)  NOT NULL,
     sub_entity ENUM('barrio','artist','none') NOT NULL DEFAULT 'none',
     sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     is_active  TINYINT(1)   NOT NULL DEFAULT 1,
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_slug (slug),
-    UNIQUE KEY uq_name (name)
+    UNIQUE KEY uq_slug    (slug),
+    UNIQUE KEY uq_name    (name),
+    UNIQUE KEY uq_qr_code (qr_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Barrios ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS barrios (
     id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     name             VARCHAR(128)  NOT NULL,
+    qr_code          VARCHAR(64)   NULL,
     dept_id          INT UNSIGNED  NULL,
     sort_order       SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     arrival_status   ENUM('expected','on-site','departed') NOT NULL DEFAULT 'expected',
@@ -57,7 +60,8 @@ CREATE TABLE IF NOT EXISTS barrios (
     departed_by_name VARCHAR(128)  NULL,
     created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_name (name),
+    UNIQUE KEY uq_name    (name),
+    UNIQUE KEY uq_qr_code (qr_code),
     KEY idx_arrival_status (arrival_status),
     KEY idx_barrio_dept    (dept_id),
     CONSTRAINT fk_barrio_dept        FOREIGN KEY (dept_id)    REFERENCES departments(id) ON DELETE SET NULL,

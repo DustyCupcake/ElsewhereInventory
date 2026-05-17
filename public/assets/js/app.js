@@ -1,8 +1,3 @@
-/**
- * Main entry point for the staff checkout app.
- * Handles session check, tab routing, and toast notifications.
- */
-
 import { get, post, setCsrf } from './api.js?v=1.0.1';
 import { initOfflineSync } from './offline.js?v=1.0.0';
 import { init as initCheckout } from './checkout.js?v=1.0.1';
@@ -12,18 +7,19 @@ import { init as initInventory } from './inventory.js?v=1.0.0';
 import { init as initHistory } from './history.js?v=1.0.0';
 import { init as initValidate, destroy as destroyValidate } from './validate.js?v=1.0.1';
 import { init as initOrders } from './order-form.js?v=1.0.0';
+import { init as initHome } from './home.js?v=1.0.0';
+import { init as initScanner, destroy as destroyScanner, getSession } from './unified-scanner.js?v=1.0.0';
 import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.0';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js?v=1.0.0').catch(() => {});
 }
 
-// Initialise language as early as possible (before DOM renders)
 initLang();
 
-let currentTab     = null;
-let toastTimer     = null;
-let _currentUser   = null;
+let currentTab   = null;
+let toastTimer   = null;
+let _currentUser = null;
 
 export function getCurrentUser() { return _currentUser; }
 
@@ -37,21 +33,15 @@ export function toast(msg, duration = 3000) {
 }
 
 async function boot() {
-  // Apply translations to static HTML (nav labels, etc.) immediately
   applyTranslations();
   renderSwitcher(document.getElementById('lang-switcher'));
 
-  // When language changes: re-apply static strings, re-render current tab,
-  // and persist the preference to the server (fire-and-forget).
   onLangChange(() => {
     applyTranslations();
     rerenderCurrentTab();
-    if (_currentUser) {
-      post('/auth/language', { lang: getLang() }).catch(() => {});
-    }
+    if (_currentUser) post('/auth/language', { lang: getLang() }).catch(() => {});
   });
 
-  // Verify session; redirect to login if expired
   let user;
   try {
     user = await get('/auth/me');
@@ -71,22 +61,11 @@ async function boot() {
   }
 
   _currentUser = user;
-
-  // Apply user's stored language preference (overrides browser/localStorage if different)
   if (user.language) setLang(user.language);
 
-  // Show user info in header
-  const userEl = document.getElementById('header-user');
-  if (userEl) userEl.textContent = user.display_name;
-
-  // Shift sessions with validate_vouchers permission and no sub_checkout
-  // get a stripped-down single-mode validator view
   const perms = user.permissions || [];
 
-  const adminLink = document.getElementById('admin-link');
-  if (adminLink && (perms.includes('manage_departments') || perms.includes('manage_dept_users'))) {
-    adminLink.style.display = '';
-  }
+  // Validator-only mode: unchanged
   const isValidatorOnly = (user.role === 'validator' || user.is_shift) &&
     perms.includes('validate_vouchers') &&
     !perms.includes('checkout_equipment') &&
@@ -96,73 +75,93 @@ async function boot() {
     return;
   }
 
-  // Show/hide nav tabs based on permissions
-  configureNavTabs(perms);
+  // Header user name
+  const userEl = document.getElementById('header-user');
+  if (userEl) userEl.textContent = user.display_name;
 
-  // Init offline sync
-  initOfflineSync(toast);
+  // Side menu user label
+  const menuUser = document.getElementById('side-menu-user');
+  if (menuUser) menuUser.textContent = user.display_name;
 
-  // Tab routing
-  const tabs = document.querySelectorAll('nav button[data-tab]');
-  tabs.forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  // Show/hide side-menu items based on permissions
+  configureSideMenu(perms);
+
+  // Back bar
+  document.getElementById('back-home-btn')?.addEventListener('click', () => switchTab('home'));
+
+  // Hamburger
+  const hamburger  = document.getElementById('hamburger-btn');
+  const backdrop   = document.getElementById('menu-backdrop');
+  const sideMenu   = document.getElementById('side-menu');
+  const closeMenu  = () => { backdrop.classList.remove('open'); sideMenu.classList.remove('open'); };
+  hamburger?.addEventListener('click', () => { backdrop.classList.add('open'); sideMenu.classList.add('open'); });
+  backdrop?.addEventListener('click', closeMenu);
+
+  document.querySelectorAll('.side-menu-item[data-menu]').forEach(btn => {
+    btn.addEventListener('click', () => { closeMenu(); switchTab(btn.dataset.menu); });
   });
 
-  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+  document.getElementById('menu-logout-btn')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     window.location.href = '/login.html';
   });
 
+  initOfflineSync(toast);
+
+  // Session banner (unified scanner progress)
+  document.getElementById('session-banner')?.addEventListener('click', () => switchTab('scanner'));
+
+  // Handle deep-link params
   const params   = new URLSearchParams(location.search);
   const barrioId = params.get('barrio') || null;
   const personQr = params.get('person') || null;
+  const scanQr   = params.get('scan')   || null;
 
   if (personQr) {
-    // Resolve person info, set global, then re-init checkout so it pre-selects them
     get('/person-info', { qr: personQr }).then(data => {
       if (data?.person) {
         window._pendingPersonQr = personQr;
         window._pendingPerson   = data.person;
       }
-      switchTab('checkout', null);
-    }).catch(() => switchTab('checkout', null));
+      switchTab('scanner', { preload: { type: 'person', qr: personQr } });
+    }).catch(() => switchTab('scanner'));
+  } else if (barrioId) {
+    // Legacy barrio deep-link: pass directly into scanner as a barrio entity
+    switchTab('scanner', { entity: { type: 'barrio', id: +barrioId } });
+  } else if (scanQr) {
+    switchTab('scanner', { preload: { qr: scanQr } });
   } else {
-    switchTab('checkout', barrioId);
+    switchTab('home');
   }
 }
 
-function configureNavTabs(perms) {
-  const canLend     = perms.includes('checkout_equipment') || perms.includes('sub_checkout');
-  const canCheckin  = perms.includes('checkin_equipment')  || perms.includes('sub_checkin');
-  const canBarrios  = perms.includes('view_barrios');
-  const canOrders   = perms.includes('submit_orders')      || perms.includes('manage_orders');
-
-  const tabVisibility = {
-    checkout:  canLend,
-    checkin:   canCheckin,
-    barrios:   canBarrios,
-    inventory: true,  // anyone with an account sees inventory
-    history:   true,
-    orders:    canOrders,
+function configureSideMenu(perms) {
+  const show = (id, cond) => {
+    const el = document.getElementById(id) || document.querySelector(`[data-menu="${id}"]`);
+    if (el) el.style.display = cond ? '' : 'none';
   };
+  document.querySelector('[data-menu="barrios"]')?.style &&
+    (document.querySelector('[data-menu="barrios"]').style.display =
+      perms.includes('view_barrios') ? '' : 'none');
+  document.querySelector('[data-menu="orders"]')?.style &&
+    (document.querySelector('[data-menu="orders"]').style.display =
+      (perms.includes('submit_orders') || perms.includes('manage_orders')) ? '' : 'none');
 
-  document.querySelectorAll('nav button[data-tab]').forEach(btn => {
-    const show = tabVisibility[btn.dataset.tab] ?? true;
-    btn.style.display = show ? '' : 'none';
-  });
+  const adminLink = document.getElementById('menu-admin-link');
+  if (adminLink) {
+    adminLink.style.display = (perms.includes('manage_departments') || perms.includes('manage_dept_users'))
+      ? '' : 'none';
+  }
 }
 
 function bootValidator() {
-  // Hide the full nav, show only a minimal header
-  const nav = document.querySelector('nav');
-  if (nav) nav.style.display = 'none';
+  document.querySelector('header')?.querySelectorAll('nav, #back-bar').forEach(el => el.style.display = 'none');
 
-  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+  document.getElementById('menu-logout-btn')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     window.location.href = '/login.html';
   });
 
-  // Use the validate panel
   document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
   const panel = document.getElementById('tab-validate');
   if (panel) {
@@ -172,61 +171,85 @@ function bootValidator() {
   }
 }
 
-/**
- * Re-initialise the currently active tab after a language change.
- * Destroys any stateful scanner/overlay, then re-inits the panel.
- */
 function rerenderCurrentTab() {
   if (!currentTab) return;
-  // Destroy state for modules that have a destroy function
   if (currentTab === 'checkin')  destroyCheckin();
   if (currentTab === 'barrios')  destroyBarrios();
   if (currentTab === 'validate') destroyValidate();
+  if (currentTab === 'scanner')  destroyScanner();
 
   const panel = document.getElementById('tab-' + currentTab);
   if (!panel) return;
 
   switch (currentTab) {
-    case 'checkout':  initCheckout(panel, null);  break;
-    case 'checkin':   initCheckin(panel);          break;
-    case 'barrios':   initBarrios(panel, null);    break;
-    case 'inventory': initInventory(panel);        break;
-    case 'history':   initHistory(panel);          break;
-    case 'orders':    initOrders(panel);           break;
-    case 'validate':  initValidate(panel, true);   break;
+    case 'home':      initHome(panel, _currentUser);        break;
+    case 'scanner':   initScanner(panel, _currentUser, { onTabSwitch: switchTab, toast }); break;
+    case 'checkout':  initCheckout(panel, null);            break;
+    case 'checkin':   initCheckin(panel);                   break;
+    case 'barrios':   initBarrios(panel, null);             break;
+    case 'inventory': initInventory(panel);                 break;
+    case 'history':   initHistory(panel);                   break;
+    case 'orders':    initOrders(panel);                    break;
+    case 'validate':  initValidate(panel, true);            break;
   }
 }
 
 export function switchTab(name, extra = null) {
   if (currentTab === name && !extra) return;
 
-  // Destroy previous tab state
-  if (currentTab === 'checkin') destroyCheckin();
-  if (currentTab === 'barrios') destroyBarrios();
+  if (currentTab === 'checkin')  destroyCheckin();
+  if (currentTab === 'barrios')  destroyBarrios();
   if (currentTab === 'validate') destroyValidate();
+  if (currentTab === 'scanner')  destroyScanner();
 
   currentTab = name;
 
-  // Update nav
-  document.querySelectorAll('nav button[data-tab]').forEach(b => {
-    b.classList.toggle('active', b.dataset.tab === name);
-  });
+  // Back bar: visible on every tab except home and validate
+  const backBar = document.getElementById('back-bar');
+  if (backBar) backBar.classList.toggle('visible', name !== 'home' && name !== 'validate');
 
-  // Hide all panels
   document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
-
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.style.display = '';
 
   switch (name) {
-    case 'checkout':  initCheckout(panel, extra);  break;
-    case 'checkin':   initCheckin(panel);           break;
-    case 'barrios':   initBarrios(panel, extra);    break;
-    case 'inventory': initInventory(panel);         break;
-    case 'history':   initHistory(panel);           break;
-    case 'orders':    initOrders(panel);            break;
-    case 'validate':  initValidate(panel, true);    break;
+    case 'home':      initHome(panel, _currentUser);        break;
+    case 'scanner':   initScanner(panel, _currentUser, { extra, onTabSwitch: switchTab, toast, updateBannerFn: refreshSessionBanner }); break;
+    case 'checkout':  initCheckout(panel, extra);           break;
+    case 'checkin':   initCheckin(panel);                   break;
+    case 'barrios':   initBarrios(panel, extra);            break;
+    case 'inventory': initInventory(panel);                 break;
+    case 'history':   initHistory(panel);                   break;
+    case 'orders':    initOrders(panel);                    break;
+    case 'validate':  initValidate(panel, true);            break;
   }
+}
+
+export function refreshSessionBanner() {
+  const banner  = document.getElementById('session-banner');
+  if (!banner) return;
+  const session = getSession();
+  if (!session || (session.items.length === 0 && !session.entity)) {
+    banner.style.display = 'none';
+    return;
+  }
+  const entityLabel = session.entity ? session.entity.name : null;
+  const itemCount   = session.items.length;
+  const label = entityLabel
+    ? `Lending to ${entityLabel} · ${itemCount} item${itemCount !== 1 ? 's' : ''}`
+    : `${itemCount} item${itemCount !== 1 ? 's' : ''} · no recipient yet`;
+
+  banner.style.display = '';
+  banner.innerHTML = `
+    <div class="session-banner" id="session-banner-inner">
+      <span class="session-banner-label">${label}</span>
+      <button class="session-banner-done" id="session-done-btn">Done →</button>
+    </div>`;
+
+  banner.querySelector('#session-done-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    switchTab('scanner', { mode: 'confirm' });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', boot);

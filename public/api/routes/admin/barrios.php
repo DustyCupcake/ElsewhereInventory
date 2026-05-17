@@ -22,16 +22,18 @@ function handle_create(): void {
 
     if ($name === '') json_error('name required');
 
+    $qr_code = bin2hex(random_bytes(12));
+
     try {
-        $stmt = db()->prepare('INSERT INTO barrios (name, sort_order) VALUES (?, ?)');
-        $stmt->execute([$name, $sort]);
+        $stmt = db()->prepare('INSERT INTO barrios (name, qr_code, sort_order) VALUES (?, ?, ?)');
+        $stmt->execute([$name, $qr_code, $sort]);
         $id = (int)db()->lastInsertId();
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) json_error('Name already exists', 409);
         throw $e;
     }
 
-    json_ok(['id' => $id, 'name' => $name, 'sort_order' => $sort], 201);
+    json_ok(['id' => $id, 'name' => $name, 'qr_code' => $qr_code, 'sort_order' => $sort], 201);
 }
 
 function handle_update(): void {

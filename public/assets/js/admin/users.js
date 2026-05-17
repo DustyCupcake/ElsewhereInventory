@@ -8,6 +8,7 @@ import { get, post, put } from '../api.js?v=1.0.1';
 
 let _toast;
 let _users          = [];
+let _depts          = [];
 let _isDeptAdmin    = false;
 let _grantablePerms = [];
 let _myDeptId       = null;
@@ -32,7 +33,15 @@ export async function initUsers(container, toast, user = null) {
   _myDeptId       = _isDeptAdmin ? (user?.dept_ids?.[0] ?? null) : null;
 
   renderShell(container);
-  await load();
+  await Promise.all([load(), loadDepts()]);
+}
+
+async function loadDepts() {
+  if (_isDeptAdmin) return;
+  try {
+    const data = await get('/admin/departments');
+    _depts = (data.departments || []).filter(d => d.is_active);
+  } catch { _depts = []; }
 }
 
 function renderShell(container) {
@@ -81,13 +90,14 @@ function renderTable() {
 
   area.innerHTML = `
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th></tr></thead>
+      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Teams</th><th>Status</th><th>Last login</th></tr></thead>
       <tbody>
         ${_users.map(u => `
           <tr class="user-row" onclick="window._users.openPanel(${u.id})">
             <td>${esc(u.display_name)}</td>
             <td style="font-family:monospace;font-size:13px;color:var(--text2)">${esc(u.username)}</td>
             <td><span class="badge ${u.role}">${ROLE_LABELS[u.role] ?? esc(u.role)}</span></td>
+            <td style="font-size:12px;color:var(--text2)">${u.dept_memberships?.length ? u.dept_memberships.map(m => esc(m.dept_name)).join(', ') : '—'}</td>
             <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
             <td style="font-size:12px;color:var(--text3)">${u.last_login ? fmtDate(u.last_login) : 'Never'}</td>
           </tr>
@@ -242,6 +252,33 @@ function showForm(u) {
         </div>
         ` : ''}
       </div>
+      ${_depts.length ? `
+      <div style="margin-top:1rem;padding-top:1rem;border-top:0.5px solid var(--border)">
+        <div class="user-panel-title" style="margin-bottom:.5rem">Team memberships</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:.75rem">
+          Assign to one or more teams. Applies to Team Admin and Team Staff roles.
+        </p>
+        ${_depts.map(d => {
+          const existing = (u?.dept_memberships ?? []).find(m => m.dept_id === d.id);
+          return `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:.35rem 0;border-bottom:0.5px solid var(--border);font-size:13px">
+              <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;margin:0">
+                <input type="checkbox" class="dept-check" data-dept-id="${d.id}"
+                  ${existing ? 'checked' : ''}
+                  style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+                ${esc(d.name)}
+              </label>
+              <select data-dept-role="${d.id}"
+                style="width:auto;padding:3px 8px;font-size:12px;margin:0;${!existing ? 'opacity:.4' : ''}"
+                ${!existing ? 'disabled' : ''}>
+                <option value="dept_staff"  ${existing?.role === 'dept_staff'  ? 'selected' : ''}>Team Staff</option>
+                <option value="dept_admin"  ${existing?.role === 'dept_admin'  ? 'selected' : ''}>Team Admin</option>
+              </select>
+            </div>`;
+        }).join('')}
+      </div>` : ''}
+
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._users.save()">Save</button>
         <button class="btn sm" onclick="window._users.closeForm()">Cancel</button>
@@ -249,6 +286,14 @@ function showForm(u) {
     </div>
   `;
   document.getElementById('u-name').focus();
+
+  // Enable/disable role selector when checkbox changes
+  document.querySelectorAll('.dept-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const sel = document.querySelector(`[data-dept-role="${cb.dataset.deptId}"]`);
+      if (sel) { sel.disabled = !cb.checked; sel.style.opacity = cb.checked ? '' : '.4'; }
+    });
+  });
 }
 
 function roleOptions(current) {
@@ -273,16 +318,25 @@ async function save() {
 
   if (!name) { _toast('Display name required'); return; }
 
+  // Collect dept memberships from checkboxes (production admin form only)
+  const dept_memberships = [];
+  document.querySelectorAll('.dept-check:checked').forEach(cb => {
+    const dept_id = +cb.dataset.deptId;
+    const roleEl  = document.querySelector(`[data-dept-role="${dept_id}"]`);
+    dept_memberships.push({ dept_id, role: roleEl?.value || 'dept_staff' });
+  });
+
   try {
     if (id) {
       const body = { id: +id, display_name: name, role };
       if (is_active !== undefined) body.is_active = is_active === '1';
+      if (dept_memberships.length || document.querySelector('.dept-check')) body.dept_memberships = dept_memberships;
       await put('/admin/users', body);
       _toast('User updated');
     } else {
       if (!username) { _toast('Username required'); return; }
       if (!password || password.length < 8) { _toast('Password must be at least 8 characters'); return; }
-      await post('/admin/users', { username, display_name: name, password, role });
+      await post('/admin/users', { username, display_name: name, password, role, dept_memberships });
       _toast('User created');
     }
     closeForm();

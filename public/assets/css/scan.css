@@ -1,0 +1,275 @@
+/* ── Scan page (scan.html) + shared scan-result card styles ─────────────────
+   These styles are used by both the standalone /scan page and the
+   in-app unified scanner overlay. Keep them in sync with app.css variables. */
+
+/* ── Standalone page layout ───────────────────────────────────────────────── */
+.scan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem 1rem;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.scan-back {
+  font-size: 14px;
+  color: var(--text2);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+}
+.scan-back:hover { background: var(--surface2); }
+.scan-header-title {
+  font-family: 'Georgia', serif;
+  font-size: 15px;
+  color: var(--text);
+}
+.scan-header-spacer { width: 60px; }
+
+.scan-main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+/* ── Scan result card ─────────────────────────────────────────────────────── */
+.scan-card {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  background: var(--surface);
+  border: 0.5px solid var(--border-med);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.scan-card--error {
+  border-color: var(--danger-border, rgba(220,60,60,.35));
+  background: var(--danger-bg, rgba(220,60,60,.06));
+}
+.scan-card-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.scan-card-body { flex: 1; min-width: 0; }
+.scan-card-name {
+  font-size: 17px;
+  font-family: 'Georgia', serif;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.scan-card-sub {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+.scan-card-status {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-top: 4px;
+}
+.status-available  { background: var(--accent-light); color: var(--accent-text); }
+.status-out        { background: #e8f0ff; color: #1a3a7a; }
+.status-activated  { background: #fff3e0; color: #7a4a00; }
+.status-used       { background: var(--surface2); color: var(--text3); }
+.status-retired    { background: var(--surface2); color: var(--text3); }
+
+@media (prefers-color-scheme: dark) {
+  .status-out       { background: #1a2a4a; color: #8aaee8; }
+  .status-activated { background: #2a1e00; color: #d4a040; }
+}
+
+/* ── Action buttons ───────────────────────────────────────────────────────── */
+.scan-actions {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.scan-action-btn {
+  width: 100%;
+  padding: .7rem 1rem;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* ── In-app: session banner ───────────────────────────────────────────────── */
+.session-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  background: var(--accent);
+  color: #fff;
+  padding: .6rem 1rem;
+  font-size: 13px;
+  font-family: 'Georgia', serif;
+  cursor: pointer;
+}
+.session-banner-label { flex: 1; }
+.session-banner-done {
+  background: rgba(255,255,255,.18);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.session-banner-done:hover { background: rgba(255,255,255,.28); }
+
+/* ── Home screen ──────────────────────────────────────────────────────────── */
+.home-wrap {
+  padding: 1rem 1rem 2rem;
+}
+.home-scan-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  width: 100%;
+  min-height: 80px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: 'Georgia', serif;
+  font-size: 20px;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: opacity .12s, transform .1s;
+}
+.home-scan-btn:hover   { opacity: .9; }
+.home-scan-btn:active  { transform: scale(.98); }
+.home-scan-icon { font-size: 1.5rem; }
+
+.home-secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 360px) { .home-secondary { grid-template-columns: 1fr; } }
+
+.home-sec-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  min-height: 64px;
+  padding: .75rem .9rem;
+  background: var(--surface);
+  border: 0.5px solid var(--border-med);
+  border-radius: var(--radius-lg);
+  font-family: 'Georgia', serif;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s, transform .1s;
+}
+.home-sec-btn:hover  { background: var(--surface2); }
+.home-sec-btn:active { transform: scale(.97); }
+.home-sec-sub {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* ── Hamburger menu ───────────────────────────────────────────────────────── */
+.hamburger-btn {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 20px;
+  line-height: 1;
+  border-radius: var(--radius);
+}
+.hamburger-btn:hover { background: var(--surface2); }
+
+.menu-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 50;
+}
+.menu-backdrop.open { display: block; }
+
+.side-menu {
+  display: none;
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(280px, 80vw);
+  background: var(--surface);
+  border-left: 0.5px solid var(--border);
+  z-index: 51;
+  padding: 1rem 0;
+  overflow-y: auto;
+  flex-direction: column;
+}
+.side-menu.open { display: flex; }
+
+.side-menu-header {
+  padding: .25rem 1.25rem .75rem;
+  border-bottom: 0.5px solid var(--border);
+  margin-bottom: .5rem;
+}
+.side-menu-user {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.side-menu-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  width: 100%;
+  padding: .75rem 1.25rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: 'Georgia', serif;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+}
+.side-menu-item:hover { background: var(--surface2); }
+.side-menu-item-icon { font-size: 1.1rem; width: 1.4rem; text-align: center; }
+
+.side-menu-divider {
+  height: 0.5px;
+  background: var(--border);
+  margin: .4rem 0;
+}
+
+/* ── Back bar ─────────────────────────────────────────────────────────────── */
+#back-bar {
+  display: none;
+  padding: .4rem .75rem;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface);
+}
+#back-bar.visible { display: flex; align-items: center; gap: .5rem; }
+#back-home-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-family: 'Georgia', serif;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+}
+#back-home-btn:hover { background: var(--surface2); }

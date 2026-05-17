@@ -91,6 +91,7 @@ export const translations = {
       contactEmail: '[SUPPORT_EMAIL]',
     },
     nav: {
+      home:      'Home',
       lend:      'Lend',
       scanIn:    'Scan In',
       barrios:   'Barrios',
@@ -309,6 +310,7 @@ export const translations = {
       contactEmail: '[SUPPORT_EMAIL]',
     },
     nav: {
+      home:      'Inicio',
       lend:      'Prestar',
       scanIn:    'Escanear',
       barrios:   'Barrios',
@@ -527,6 +529,7 @@ export const translations = {
       contactEmail: '[SUPPORT_EMAIL]',
     },
     nav: {
+      home:      'Accueil',
       lend:      'Prêter',
       scanIn:    'Scanner',
       barrios:   'Barrios',

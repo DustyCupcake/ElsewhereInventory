@@ -63,7 +63,8 @@ $routes = [
     ['POST', '/items/activate',      'routes/transactions.php', 'handle_activate'],
     ['POST', '/items/fill-confirm',  'routes/transactions.php', 'handle_fill_confirm'],
 
-    // Public
+    // Public / unified scan
+    ['GET',  '/scan/lookup',         'routes/scan.php',         'handle_scan_lookup'],
     ['GET',  '/voucher/status',      'routes/voucher.php',      'handle_voucher_status'],
     ['GET',  '/item/info',           'routes/item_public.php',  'handle_item_info'],
 
@@ -156,6 +157,8 @@ $routes = [
     ['DELETE', '/admin/items',                   'routes/admin/equipment.php',   'handle_delete_item'],
     ['GET',    '/admin/items/qr-sheet',          'routes/admin/qr_sheet.php',    'handle_qr_sheet'],
     ['GET',    '/admin/barrio-qr',               'routes/admin/barrio_qr.php',   'handle_barrio_qr'],
+    ['GET',    '/admin/dept-qr',                'routes/admin/dept_qr.php',     'handle_dept_qr'],
+    ['GET',    '/my-qr',                        'routes/persons.php',           'handle_my_qr'],
 
     // Admin — users
     ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],

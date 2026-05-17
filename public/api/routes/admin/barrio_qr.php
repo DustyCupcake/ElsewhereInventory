@@ -10,7 +10,7 @@ function handle_barrio_qr(): void {
         json_error('Missing barrio id', 400);
     }
 
-    $stmt = db()->prepare('SELECT id, name FROM barrios WHERE id = ? LIMIT 1');
+    $stmt = db()->prepare('SELECT id, name, qr_code FROM barrios WHERE id = ? LIMIT 1');
     $stmt->execute([$id]);
     $barrio = $stmt->fetch();
 
@@ -18,9 +18,16 @@ function handle_barrio_qr(): void {
         json_error('Barrio not found', 404);
     }
 
-    $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host     = $_SERVER['HTTP_HOST'];
-    $deep_link = $scheme . '://' . $host . '/?barrio=' . $barrio['id'];
+    // Ensure qr_code exists (backfill if missing from pre-migration rows)
+    if (empty($barrio['qr_code'])) {
+        $qr_code = bin2hex(random_bytes(12));
+        db()->prepare('UPDATE barrios SET qr_code = ? WHERE id = ?')->execute([$qr_code, $barrio['id']]);
+        $barrio['qr_code'] = $qr_code;
+    }
+
+    $scheme    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host      = $_SERVER['HTTP_HOST'];
+    $deep_link = $scheme . '://' . $host . '/scan?qr=' . rawurlencode($barrio['qr_code']);
 
     $use_lib = file_exists(__DIR__ . '/../../../../vendor/phpqrcode/qrlib.php');
     if ($use_lib) {

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scan — Elsewhere Inventory</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.0">
+<link rel="stylesheet" href="/assets/css/scan.css?v=1.0.0">
+</head>
+<body>
+
+<header class="scan-header">
+  <a href="/" class="scan-back">← App</a>
+  <div class="scan-header-title">Elsewhere</div>
+  <div class="scan-header-spacer"></div>
+</header>
+
+<main class="scan-main">
+  <div id="scan-result-container">
+    <div class="empty"><span class="spinner"></span></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script type="module">
+import { renderScanResult } from '/assets/js/scan-result.js?v=1.0.0';
+
+const params = new URLSearchParams(location.search);
+const qr     = params.get('qr') || '';
+
+const container = document.getElementById('scan-result-container');
+
+if (!qr) {
+  container.innerHTML = '<div class="scan-card scan-card--error"><div class="scan-card-icon">❓</div><div class="scan-card-body"><div class="scan-card-name">No code provided</div><div class="scan-card-sub">Scan a QR code to see information about it.</div></div></div>';
+} else {
+  Promise.all([
+    fetch('/api/scan/lookup?qr=' + encodeURIComponent(qr), { credentials: 'include' }).then(r => r.json()),
+    fetch('/api/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
+  ]).then(([lookup, user]) => {
+    const perms = user?.permissions ?? [];
+
+    renderScanResult(container, lookup, perms, (action, data) => {
+      switch (action) {
+        case 'login':
+          window.location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+          break;
+        case 'checkin':
+          window.location.href = '/?scan=' + encodeURIComponent(qr);
+          break;
+        case 'borrow_self':
+          handleBorrowSelf(data, user, perms);
+          break;
+        case 'checkout_start':
+        case 'entity_select':
+          window.location.href = '/?scan=' + encodeURIComponent(qr);
+          break;
+        case 'activate':
+          handleActivate(data, user);
+          break;
+        case 'validate':
+          handleValidate(data, user);
+          break;
+      }
+    });
+  }).catch(err => {
+    container.innerHTML = '<div class="scan-card scan-card--error"><div class="scan-card-body"><div class="scan-card-name">Error loading item</div><div class="scan-card-sub">' + err.message + '</div></div></div>';
+  });
+}
+
+async function getCsrf() {
+  const r = await fetch('/api/auth/csrf', { credentials: 'include' });
+  const d = await r.json();
+  return d.csrf_token;
+}
+
+async function handleBorrowSelf(data, user) {
+  const csrf = await getCsrf();
+  const r = await fetch('/api/person-checkout', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ person_qr: user.qr_token, item_qrs: [data.qr_code] }),
+  });
+  const result = await r.json();
+  showToast(result.error ? ('Error: ' + result.error) : 'Borrowed successfully');
+  if (!result.error) setTimeout(() => location.reload(), 1200);
+}
+
+async function handleActivate(data, user) {
+  const csrf = await getCsrf();
+  const r = await fetch('/api/items/activate', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ qr: data.qr_code }),
+  });
+  const result = await r.json();
+  showToast(result.success ? 'Activated' : (result.error ?? 'Error'));
+  if (result.success) setTimeout(() => location.reload(), 1200);
+}
+
+async function handleValidate(data, user) {
+  const csrf = await getCsrf();
+  const r = await fetch('/api/items/use', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ qr: data.qr_code }),
+  });
+  const result = await r.json();
+  showToast(result.success ? 'Validated' : (result.error ?? 'Error'));
+  if (result.success) setTimeout(() => location.reload(), 1200);
+}
+
+let _toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
