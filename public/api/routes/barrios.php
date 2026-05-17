@@ -19,14 +19,16 @@ function handle_list_barrios(): void {
         return;
     }
 
-    $rows = db()->prepare(
+    $stmt = db()->prepare(
         "SELECT b.*,
             (SELECT COUNT(*) FROM equipment_items e
              WHERE e.current_barrio_id = b.id) AS items_out_count
          FROM barrios b
          $where
          ORDER BY b.sort_order, b.name"
-    )->execute($params)->fetchAll();
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
 
     foreach ($rows as &$r) {
         $r['id']               = (int)$r['id'];

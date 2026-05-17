@@ -93,13 +93,15 @@ function handle_scan_lookup(): void {
             $result['qr_token'] = $person['qr_token'];
 
             if (in_array('manage_users', $perms, true) || in_array('manage_dept_users', $perms, true)) {
-                $memberships = db()->prepare(
+                $mem_stmt = db()->prepare(
                     'SELECT d.id, d.name, udr.role
                      FROM user_dept_roles udr
                      JOIN departments d ON d.id = udr.dept_id
                      WHERE udr.user_id = ?
                      ORDER BY d.name'
-                )->execute([$person['id']])->fetchAll();
+                );
+                $mem_stmt->execute([$person['id']]);
+                $memberships = $mem_stmt->fetchAll();
                 $result['dept_memberships'] = array_map(
                     fn($m) => ['id' => (int)$m['id'], 'name' => $m['name'], 'role' => $m['role']],
                     $memberships
@@ -124,9 +126,11 @@ function handle_scan_lookup(): void {
             $result['id'] = (int)$barrio['id'];
 
             if (in_array('view_barrios', $perms, true)) {
-                $item_count = (int)db()->prepare(
+                $ic_stmt = db()->prepare(
                     'SELECT COUNT(*) FROM equipment_items WHERE current_barrio_id = ?'
-                )->execute([$barrio['id']])->fetchColumn();
+                );
+                $ic_stmt->execute([$barrio['id']]);
+                $item_count = (int)$ic_stmt->fetchColumn();
                 $result['item_count'] = $item_count;
             }
         }
@@ -148,9 +152,11 @@ function handle_scan_lookup(): void {
             $result['id'] = (int)$dept['id'];
 
             if (in_array('manage_departments', $perms, true) || in_array('manage_dept_users', $perms, true)) {
-                $member_count = (int)db()->prepare(
+                $mc_stmt = db()->prepare(
                     'SELECT COUNT(*) FROM user_dept_roles WHERE dept_id = ?'
-                )->execute([$dept['id']])->fetchColumn();
+                );
+                $mc_stmt->execute([$dept['id']]);
+                $member_count = (int)$mc_stmt->fetchColumn();
                 $result['member_count'] = $member_count;
             }
         }

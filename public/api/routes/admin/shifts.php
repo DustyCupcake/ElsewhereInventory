@@ -123,9 +123,11 @@ function handle_delete_shift(): void {
     $id = (int)($b['id'] ?? 0);
     if (!$id) json_error('id required');
 
-    $used = (int)db()->prepare(
+    $used_stmt = db()->prepare(
         'SELECT COUNT(*) FROM shift_tokens WHERE shift_id = ? AND used_at IS NOT NULL'
-    )->execute([$id])->fetchColumn();
+    );
+    $used_stmt->execute([$id]);
+    $used = (int)$used_stmt->fetchColumn();
 
     if ($used > 0) {
         json_error('Cannot delete shift: tokens have been used', 409);
@@ -148,7 +150,9 @@ function handle_create_shift_tokens(): void {
     if (!$shift_id) json_error('shift_id required');
 
     // Verify shift exists and user has access
-    $shift = db()->prepare('SELECT id FROM shifts WHERE id = ?')->execute([$shift_id])->fetch();
+    $shift_chk = db()->prepare('SELECT id FROM shifts WHERE id = ?');
+    $shift_chk->execute([$shift_id]);
+    $shift = $shift_chk->fetch();
     if (!$shift) json_error('Shift not found', 404);
 
     $pdo   = db();
@@ -192,17 +196,21 @@ function handle_shift_qr_sheet(): void {
     $shift_id = (int)($_GET['shift_id'] ?? 0);
     if (!$shift_id) json_error('shift_id required');
 
-    $shift = db()->prepare(
+    $shift_stmt = db()->prepare(
         'SELECT s.*, d.name AS dept_name FROM shifts s
          LEFT JOIN departments d ON d.id = s.dept_id
          WHERE s.id = ?'
-    )->execute([$shift_id])->fetch();
+    );
+    $shift_stmt->execute([$shift_id]);
+    $shift = $shift_stmt->fetch();
 
     if (!$shift) json_error('Shift not found', 404);
 
-    $tokens = db()->prepare(
+    $tok_stmt = db()->prepare(
         'SELECT id, token, label FROM shift_tokens WHERE shift_id = ? ORDER BY id'
-    )->execute([$shift_id])->fetchAll();
+    );
+    $tok_stmt->execute([$shift_id]);
+    $tokens = $tok_stmt->fetchAll();
 
     if (empty($tokens)) {
         header('Content-Type: text/html; charset=utf-8');

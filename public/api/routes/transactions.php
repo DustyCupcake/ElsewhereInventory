@@ -282,9 +282,11 @@ function handle_person_checkout(): void {
         json_error('person_qr and item_qrs required');
     }
 
-    $person = db()->prepare(
+    $person_stmt = db()->prepare(
         'SELECT id, display_name FROM users WHERE qr_token = ? AND is_active = 1'
-    )->execute([$person_qr])->fetch();
+    );
+    $person_stmt->execute([$person_qr]);
+    $person = $person_stmt->fetch();
     if (!$person) json_error('Person QR not found', 404);
 
     $results = [];
@@ -317,7 +319,9 @@ function handle_person_checkout(): void {
             }
 
             // Verify the item type is borrowable and the person being checked out to is eligible
-            $type_row = $pdo->prepare('SELECT borrowable FROM equipment_types WHERE id = (SELECT equipment_type_id FROM equipment_items WHERE id = ?)')->execute([$item['id']])->fetch();
+            $tr_stmt = $pdo->prepare('SELECT borrowable FROM equipment_types WHERE id = (SELECT equipment_type_id FROM equipment_items WHERE id = ?)');
+            $tr_stmt->execute([$item['id']]);
+            $type_row = $tr_stmt->fetch();
             if (empty($type_row['borrowable'])) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_borrowable'];
                 continue;
@@ -368,9 +372,11 @@ function handle_sub_person_checkout(): void {
         require_dept_access($dept_id);
     }
 
-    $person = db()->prepare(
+    $person_stmt = db()->prepare(
         'SELECT id, display_name FROM users WHERE qr_token = ? AND is_active = 1'
-    )->execute([$person_qr])->fetch();
+    );
+    $person_stmt->execute([$person_qr]);
+    $person = $person_stmt->fetch();
     if (!$person) json_error('Person QR not found', 404);
 
     $results = [];
@@ -437,9 +443,11 @@ function handle_set_label(): void {
 
     if ($item_qr === '') json_error('item_qr required');
 
-    $item = db()->prepare(
+    $stmt = db()->prepare(
         'SELECT id, current_dept_id FROM equipment_items WHERE qr_code = ? AND status = "checked-out"'
-    )->execute([$item_qr])->fetch();
+    );
+    $stmt->execute([$item_qr]);
+    $item = $stmt->fetch();
 
     if (!$item) json_error('Item not found or not checked out', 404);
 
@@ -618,19 +626,27 @@ function handle_activate(): void {
 // Helper: build human-readable current location label for an item
 function _item_location_label(object $pdo, array $item): string {
     if (!empty($item['current_person_id'])) {
-        $r = $pdo->prepare('SELECT display_name FROM users WHERE id = ?')->execute([$item['current_person_id']])->fetch();
+        $r_stmt = $pdo->prepare('SELECT display_name FROM users WHERE id = ?');
+        $r_stmt->execute([$item['current_person_id']]);
+        $r = $r_stmt->fetch();
         return $r ? $r['display_name'] : 'unknown person';
     }
     if (!empty($item['current_barrio_id'])) {
-        $r = $pdo->prepare('SELECT name FROM barrios WHERE id = ?')->execute([$item['current_barrio_id']])->fetch();
+        $r_stmt = $pdo->prepare('SELECT name FROM barrios WHERE id = ?');
+        $r_stmt->execute([$item['current_barrio_id']]);
+        $r = $r_stmt->fetch();
         return $r ? $r['name'] : 'unknown barrio';
     }
     if (!empty($item['current_artist_id'])) {
-        $r = $pdo->prepare('SELECT name FROM artists WHERE id = ?')->execute([$item['current_artist_id']])->fetch();
+        $r_stmt = $pdo->prepare('SELECT name FROM artists WHERE id = ?');
+        $r_stmt->execute([$item['current_artist_id']]);
+        $r = $r_stmt->fetch();
         return $r ? $r['name'] : 'unknown artist';
     }
     if (!empty($item['current_dept_id'])) {
-        $r = $pdo->prepare('SELECT name FROM departments WHERE id = ?')->execute([$item['current_dept_id']])->fetch();
+        $r_stmt = $pdo->prepare('SELECT name FROM departments WHERE id = ?');
+        $r_stmt->execute([$item['current_dept_id']]);
+        $r = $r_stmt->fetch();
         return $r ? $r['name'] : 'unknown dept';
     }
     return 'unknown';

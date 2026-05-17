@@ -17,7 +17,7 @@ function handle_person_info(): void {
 
     if (!$person) json_error('Person not found', 404);
 
-    $items = db()->prepare(
+    $stmt = db()->prepare(
         'SELECT ei.id, ei.qr_code, ei.dept_label,
                 CONCAT(et.name, \' #\', ei.item_number) AS name,
                 et.category
@@ -25,7 +25,9 @@ function handle_person_info(): void {
          JOIN equipment_types et ON et.id = ei.equipment_type_id
          WHERE ei.current_person_id = ?
          ORDER BY et.name, ei.item_number'
-    )->execute([(int)$person['id']])->fetchAll();
+    );
+    $stmt->execute([(int)$person['id']]);
+    $items = $stmt->fetchAll();
 
     foreach ($items as &$it) $it['id'] = (int)$it['id'];
     unset($it);
@@ -123,11 +125,13 @@ function handle_person_search(): void {
     }
 
     $like  = '%' . $q . '%';
-    $rows  = db()->prepare(
+    $stmt  = db()->prepare(
         'SELECT id, display_name, qr_token FROM users
          WHERE is_active = 1 AND display_name LIKE ?
          ORDER BY display_name LIMIT 20'
-    )->execute([$like])->fetchAll();
+    );
+    $stmt->execute([$like]);
+    $rows = $stmt->fetchAll();
 
     foreach ($rows as &$r) $r['id'] = (int)$r['id'];
     unset($r);

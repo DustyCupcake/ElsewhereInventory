@@ -15,9 +15,11 @@ function handle_camps(): void {
         $params       = $user['dept_ids'];
     }
 
-    $rows = db()->prepare(
+    $stmt = db()->prepare(
         "SELECT id, name, arrival_status FROM barrios $where ORDER BY sort_order, name"
-    )->execute($params)->fetchAll();
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
 
     json_ok(['camps' => $rows]);
 }

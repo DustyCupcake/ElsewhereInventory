@@ -15,7 +15,7 @@ import { get, post } from './api.js?v=1.0.1';
 import { Scanner } from './scanner.js?v=1.0.0';
 import { toast, switchTab, getCurrentUser } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
-import { t } from './i18n.js?v=1.0.0';
+import { t } from './i18n.js?v=1.0.1';
 
 const __ = (key) => t('checkout', key);
 const _c = (key) => t('common', key);
@@ -46,7 +46,7 @@ function buildAvailableModes(user) {
   if (perms.includes('sub_checkout')) {
     if (subEntities.includes('barrio')) modes.push('sub_barrio');
     if (subEntities.includes('artist')) modes.push('sub_artist');
-    modes.push('sub_person');
+    if (!perms.includes('checkout_equipment')) modes.push('sub_person');
   }
   return modes.length ? modes : ['sub_barrio']; // fallback
 }
@@ -57,13 +57,13 @@ function modeEntityLabel(m = mode) {
 }
 
 function modeChipLabel(m) {
-  const labels = { dept: 'To team', person_prod: 'To person', sub_barrio: 'To barrio', sub_artist: 'To artist', sub_person: 'To person' };
-  return labels[m] ?? m;
+  const map = { dept: 'modeToDept', person_prod: 'modeToPerson', sub_barrio: 'modeToBarrio', sub_artist: 'modeToArtist', sub_person: 'modeToPerson' };
+  return map[m] ? __(map[m]) : m;
 }
 
 function modeStep1Title() {
-  const labels = { dept: 'Select team', person_prod: 'Select person', sub_barrio: __('step1'), sub_artist: 'Select artist', sub_person: 'Select person' };
-  return labels[mode] ?? 'Select';
+  const map = { dept: 'selectTeam', person_prod: 'selectPerson', sub_barrio: 'step1', sub_artist: 'selectArtist', sub_person: 'selectPerson' };
+  return map[mode] ? __(map[mode]) : 'Select';
 }
 
 function isPersonMode(m = mode) {

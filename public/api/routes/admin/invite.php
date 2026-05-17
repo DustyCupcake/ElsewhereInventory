@@ -105,7 +105,9 @@ function handle_revoke_invite(): void {
 
     // dept_admin: verify they own this invite
     if (!has_permission('manage_departments')) {
-        $tok = db()->prepare('SELECT dept_id FROM invite_tokens WHERE id = ?')->execute([$id])->fetch();
+        $tok_stmt = db()->prepare('SELECT dept_id FROM invite_tokens WHERE id = ?');
+        $tok_stmt->execute([$id]);
+        $tok = $tok_stmt->fetch();
         if (!$tok || !in_array((int)$tok['dept_id'], $user['dept_ids'], true)) {
             json_error('Forbidden', 403);
         }

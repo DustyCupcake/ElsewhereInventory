@@ -27,7 +27,7 @@
 <meta name="twitter:title" content="Elsewhere Inventory">
 <meta name="twitter:description" content="Event-wide equipment checkout and inventory tracker.">
 <meta name="twitter:image" content="https://barrios.thep.it/assets/og-image.png">
-<link rel="stylesheet" href="/assets/css/main.css?v=1.0.0">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.1">
 <link rel="stylesheet" href="/assets/css/app.css?v=1.0.1">
 <link rel="stylesheet" href="/assets/css/scan.css?v=1.0.0">
 </head>
@@ -37,7 +37,6 @@
   <div class="header-top">
     <div class="logo">ELSE<span>WHERE</span></div>
     <div class="header-controls">
-      <div class="lang-switcher" id="lang-switcher"></div>
       <div class="user-info">
         <span id="header-user"></span>
         <button class="hamburger-btn" id="hamburger-btn" aria-label="Menu">&#9776;</button>
@@ -45,7 +44,7 @@
     </div>
   </div>
   <div id="back-bar">
-    <button id="back-home-btn">← Home</button>
+    <button id="back-home-btn" data-i18n="nav.backHome">← Home</button>
   </div>
   <nav style="display:none">
     <button data-tab="checkout"  data-i18n="nav.lend">Lend</button>
@@ -80,31 +79,33 @@
     <div class="side-menu-user" id="side-menu-user"></div>
   </div>
   <button class="side-menu-item" data-menu="inventory">
-    <span class="side-menu-item-icon">📦</span> Inventory
+    <span class="side-menu-item-icon">📦</span><span data-i18n="nav.inventory">Inventory</span>
   </button>
   <button class="side-menu-item" data-menu="history">
-    <span class="side-menu-item-icon">📋</span> History
+    <span class="side-menu-item-icon">📋</span><span data-i18n="nav.history">History</span>
   </button>
   <button class="side-menu-item" data-menu="barrios" style="display:none">
-    <span class="side-menu-item-icon">⛺</span> Barrios
+    <span class="side-menu-item-icon">⛺</span><span data-i18n="nav.barrios">Barrios</span>
   </button>
   <button class="side-menu-item" data-menu="orders" style="display:none">
-    <span class="side-menu-item-icon">📝</span> Orders
+    <span class="side-menu-item-icon">📝</span><span data-i18n="nav.orders">Orders</span>
   </button>
   <div class="side-menu-divider"></div>
   <a class="side-menu-item" id="menu-admin-link" href="/admin/" style="display:none">
-    <span class="side-menu-item-icon">⚙️</span> Admin panel
+    <span class="side-menu-item-icon">⚙️</span><span data-i18n="nav.adminPanel">Admin panel</span>
   </a>
   <a class="side-menu-item" id="menu-my-qr-link" href="/api/my-qr" target="_blank">
-    <span class="side-menu-item-icon">🪪</span> My QR code
+    <span class="side-menu-item-icon">🪪</span><span data-i18n="nav.myQr">My QR code</span>
   </a>
   <div class="side-menu-divider"></div>
+  <div class="side-menu-lang" id="lang-switcher-menu"></div>
+  <div class="side-menu-divider"></div>
   <button class="side-menu-item" id="menu-logout-btn">
-    <span class="side-menu-item-icon">→</span> Log out
+    <span class="side-menu-item-icon">→</span><span data-i18n="nav.logout">Log out</span>
   </button>
 </nav>
 
 <script src="/assets/vendor/jsqr.min.js?v=1.0.0"></script>
-<script type="module" src="/assets/js/app.js?v=1.0.3"></script>
+<script type="module" src="/assets/js/app.js?v=1.0.4"></script>
 </body>
 </html>

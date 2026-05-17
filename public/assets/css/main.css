@@ -223,6 +223,7 @@ label { display: block; font-size: 12px; color: var(--text2); margin-bottom: .25
 }
 .lang-btn:hover { background: var(--surface2); color: var(--text); }
 .lang-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+.side-menu-lang { padding: 8px 16px; }
 
 /* ── Placeholder text (unset times / info) ──────────────────────────────── */
 .placeholder {

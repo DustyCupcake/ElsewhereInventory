@@ -5,7 +5,7 @@
 import { get, post } from './api.js?v=1.0.1';
 import { toast } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
-import { t } from './i18n.js?v=1.0.0';
+import { t } from './i18n.js?v=1.0.1';
 
 const __ = (key) => t('barrios', key);
 const _c = (key) => t('common', key);
@@ -35,13 +35,13 @@ async function loadList() {
   detailId     = null;
   arrivalOpen  = false;
   activeFilter = null;
-  container.innerHTML = `<div class="card"><div class="empty" style="padding:1.5rem 0">Loading…</div></div>`;
+  container.innerHTML = `<div class="card"><div class="empty" style="padding:1.5rem 0">${__('loading')}</div></div>`;
   try {
     const data = await get('/barrios');
     renderList(data.barrios || []);
   } catch (e) {
     toast('Could not load barrios: ' + e.message);
-    container.innerHTML = `<div class="card"><div class="empty">Failed to load</div></div>`;
+    container.innerHTML = `<div class="card"><div class="empty">${__('loadFailed')}</div></div>`;
   }
 }
 
@@ -84,7 +84,7 @@ function renderFiltered() {
     <div class="card" style="padding:0">
       ${visible.length
         ? visible.map(b => barrioCardHTML(b)).join('')
-        : '<div class="empty">No barrios configured</div>'
+        : `<div class="empty">${__('noneConfigured')}</div>`
       }
     </div>
   `;
@@ -108,7 +108,7 @@ function renderFiltered() {
 
 function barrioCardHTML(b) {
   const badge = b.arrival_status === 'on-site' && b.items_out_count > 0
-    ? `<span class="items-out-badge">${b.items_out_count} out</span>`
+    ? `<span class="items-out-badge">${__('itemsOut').replace('[N]', b.items_out_count)}</span>`
     : '';
   return `
     <div class="barrio-card" data-barrio-id="${b.id}">
@@ -128,7 +128,7 @@ function barrioCardHTML(b) {
 async function loadDetail(id) {
   detailId    = id;
   arrivalOpen = false;
-  container.innerHTML = `<div class="card"><div class="empty" style="padding:1.5rem 0">Loading…</div></div>`;
+  container.innerHTML = `<div class="card"><div class="empty" style="padding:1.5rem 0">${__('loading')}</div></div>`;
   try {
     const data = await get('/barrios/' + id);
     renderDetail(data.barrio, data.items_out || [], data.entitlements || [], data.equipment_orders || []);
@@ -145,16 +145,16 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
     <div class="barrio-detail-section">
       <div class="card-label">${__('sectionArrival')}</div>
       <div class="barrio-detail-row">
-        <span class="barrio-detail-key">Arrived</span>
+        <span class="barrio-detail-key">${__('arrived')}</span>
         <span>${fmtDateTime(barrio.arrived_at)}</span>
       </div>
       <div class="barrio-detail-row">
-        <span class="barrio-detail-key">By</span>
+        <span class="barrio-detail-key">${__('by')}</span>
         <span>${_esc(barrio.arrived_by_name ?? '—')}</span>
       </div>
       <div class="barrio-detail-row">
-        <span class="barrio-detail-key">Orientation</span>
-        <span>${barrio.orientation_done ? '✓ Complete' : '✗ Not recorded'}</span>
+        <span class="barrio-detail-key">${__('orientation')}</span>
+        <span>${barrio.orientation_done ? __('orientationDone') : __('orientationNone')}</span>
       </div>
       ${entitlementsHTML(entitlements, status)}
     </div>
@@ -185,11 +185,11 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
     <div class="barrio-detail-section" style="margin-top:.75rem">
       <div class="card-label">${__('sectionDeparture')}</div>
       <div class="barrio-detail-row">
-        <span class="barrio-detail-key">Departed</span>
+        <span class="barrio-detail-key">${__('departed')}</span>
         <span>${fmtDateTime(barrio.departed_at)}</span>
       </div>
       <div class="barrio-detail-row">
-        <span class="barrio-detail-key">By</span>
+        <span class="barrio-detail-key">${__('by')}</span>
         <span>${_esc(barrio.departed_by_name ?? '—')}</span>
       </div>
     </div>
@@ -207,7 +207,7 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
               </div>
             </div>
           `).join('')
-        : '<div class="empty-list">None</div>'
+        : `<div class="empty-list">${__('none')}</div>`
       }
     </div>
   `;
@@ -231,7 +231,7 @@ function renderDetail(barrio, itemsOut, entitlements, equipmentOrders) {
 
   container.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
-      <button class="btn ghost" style="width:auto;margin:0;padding:6px 10px" id="barrio-back">← Back</button>
+      <button class="btn ghost" style="width:auto;margin:0;padding:6px 10px" id="barrio-back">← ${_c('back')}</button>
       <span class="status-dot ${status}" style="flex-shrink:0"></span>
       <span style="font-size:16px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(barrio.name)}</span>
       <span class="barrio-status-label ${status}">${statusLabel(status)}</span>
@@ -267,7 +267,7 @@ function entitlementsHTML(entitlements, status) {
   if (!entitlements.length) return '';
   return `
     <div style="margin-top:.75rem">
-      <div class="card-label">Consumables</div>
+      <div class="card-label">${__('consumables')}</div>
       <div style="display:grid;grid-template-columns:1fr repeat(3,auto);gap:.25rem .75rem;align-items:center;font-size:13px;margin-top:.4rem">
         <span style="color:var(--text3)">${t('inventory', 'colItem')}</span>
         <span style="color:var(--text3);text-align:right">${__('purchased')}</span>

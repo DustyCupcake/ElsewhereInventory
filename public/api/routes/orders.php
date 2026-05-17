@@ -21,7 +21,7 @@ function handle_get_dept_orders(): void {
         }
     }
 
-    $rows = db()->prepare(
+    $stmt = db()->prepare(
         'SELECT et.id AS equipment_type_id, et.name AS type_name, et.category,
                 et.order_deadline,
                 COALESCE(deo.quantity_ordered, 0) AS quantity_ordered,
@@ -32,7 +32,9 @@ function handle_get_dept_orders(): void {
          LEFT JOIN dept_equipment_orders deo
            ON deo.equipment_type_id = et.id AND deo.dept_id = ?
          ORDER BY et.category, et.name'
-    )->execute([$dept_id, $dept_id])->fetchAll();
+    );
+    $stmt->execute([$dept_id, $dept_id]);
+    $rows = $stmt->fetchAll();
 
     foreach ($rows as &$r) {
         $r['quantity_ordered']  = (int)$r['quantity_ordered'];
@@ -72,9 +74,11 @@ function handle_save_dept_orders(): void {
             if (!$type_id) continue;
 
             // Enforce deadline
-            $deadline = db()->prepare(
+            $dl_stmt = db()->prepare(
                 'SELECT order_deadline FROM equipment_types WHERE id = ?'
-            )->execute([$type_id])->fetchColumn();
+            );
+            $dl_stmt->execute([$type_id]);
+            $deadline = $dl_stmt->fetchColumn();
 
             if ($deadline && strtotime($deadline) < time()) {
                 continue; // silently skip deadline-passed types

@@ -123,6 +123,17 @@ RewriteRule ^api/(.*)$ api/index.php?path=$1 [QSA,L]
 
 PDO singleton via `db()`. Config from `.env` (`DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS`). utf8mb4, exceptions enabled, associative fetch, prepared statements without emulation.
 
+**PDO execute() returns bool, not $this.** Never chain `->execute()->fetch()`. Always split onto separate lines:
+```php
+// WRONG — execute() returns bool, fetch() will throw "call to member function on bool"
+$row = db()->prepare('SELECT ...')->execute([$id])->fetch();
+
+// CORRECT
+$stmt = db()->prepare('SELECT ...');
+$stmt->execute([$id]);
+$row = $stmt->fetch();
+```
+
 ### Transaction Model
 
 All checkout/checkin operations use `SELECT ... FOR UPDATE` row locking and are wrapped in a database transaction. Every state change writes an immutable row to `transactions`.

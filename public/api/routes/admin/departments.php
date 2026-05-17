@@ -100,17 +100,21 @@ function handle_delete_department(): void {
     $id = (int)($b['id'] ?? 0);
     if (!$id) json_error('id required');
 
-    $members = (int)db()->prepare(
+    $mbr_stmt = db()->prepare(
         'SELECT COUNT(*) FROM user_dept_roles WHERE dept_id = ?'
-    )->execute([$id])->fetchColumn();
+    );
+    $mbr_stmt->execute([$id]);
+    $members = (int)$mbr_stmt->fetchColumn();
 
     if ($members > 0) {
         json_error('Cannot delete department with active members', 409);
     }
 
-    $items = (int)db()->prepare(
+    $itm_stmt = db()->prepare(
         'SELECT COUNT(*) FROM equipment_items WHERE current_dept_id = ?'
-    )->execute([$id])->fetchColumn();
+    );
+    $itm_stmt->execute([$id]);
+    $items = (int)$itm_stmt->fetchColumn();
 
     if ($items > 0) {
         json_error('Cannot delete department with checked-out equipment', 409);

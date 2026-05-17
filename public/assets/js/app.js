@@ -1,15 +1,15 @@
 import { get, post, setCsrf } from './api.js?v=1.0.1';
 import { initOfflineSync } from './offline.js?v=1.0.0';
-import { init as initCheckout } from './checkout.js?v=1.0.1';
+import { init as initCheckout } from './checkout.js?v=1.0.2';
 import { init as initCheckin, destroy as destroyCheckin } from './checkin.js?v=1.0.2';
-import { init as initBarrios, destroy as destroyBarrios } from './barrios.js?v=1.0.1';
+import { init as initBarrios, destroy as destroyBarrios } from './barrios.js?v=1.0.2';
 import { init as initInventory } from './inventory.js?v=1.0.0';
 import { init as initHistory } from './history.js?v=1.0.0';
 import { init as initValidate, destroy as destroyValidate } from './validate.js?v=1.0.1';
 import { init as initOrders } from './order-form.js?v=1.0.0';
-import { init as initHome } from './home.js?v=1.0.0';
+import { init as initHome } from './home.js?v=1.0.1';
 import { init as initScanner, destroy as destroyScanner, getSession } from './unified-scanner.js?v=1.0.0';
-import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.0';
+import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.1';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js?v=1.0.0').catch(() => {});
@@ -34,7 +34,7 @@ export function toast(msg, duration = 3000) {
 
 async function boot() {
   applyTranslations();
-  renderSwitcher(document.getElementById('lang-switcher'));
+  renderSwitcher(document.getElementById('lang-switcher-menu'));
 
   onLangChange(() => {
     applyTranslations();
