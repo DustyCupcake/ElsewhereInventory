@@ -146,8 +146,12 @@ function handle_dept_members(): void {
 
 function handle_set_dept_role(): void {
     require_method('PUT');
-    $user = require_permission('manage_users');
+    $caller     = require_auth();
     verify_csrf();
+
+    $full_admin = has_permission('manage_users');
+    $dept_admin = has_permission('manage_dept_users');
+    if (!$full_admin && !$dept_admin) json_error('Forbidden', 403);
 
     $b       = body();
     $user_id = (int)($b['user_id'] ?? 0);
@@ -155,6 +159,14 @@ function handle_set_dept_role(): void {
     $role    = trim($b['role'] ?? '');
 
     if (!$user_id || !$dept_id) json_error('user_id and dept_id required');
+
+    // Dept admins may only modify their own teams, and may not promote to dept_admin
+    if (!$full_admin) {
+        if (!in_array($dept_id, $caller['dept_ids'], true)) json_error('Forbidden', 403);
+        if ($role !== '' && $role !== 'remove' && $role !== 'dept_staff') {
+            json_error('Forbidden', 403);
+        }
+    }
 
     if ($role === '' || $role === 'remove') {
         db()->prepare('DELETE FROM user_dept_roles WHERE user_id = ? AND dept_id = ?')

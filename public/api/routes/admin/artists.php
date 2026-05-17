@@ -17,7 +17,7 @@ function handle_list_artists_admin(): void {
         $params = [(int)$_GET['dept_id']];
     }
 
-    $rows = db()->prepare(
+    $stmt = db()->prepare(
         "SELECT a.id, a.dept_id, d.name AS dept_name, a.name, a.sort_order,
                 a.assigned_staff_id, u.display_name AS assigned_staff_name, a.created_at
          FROM artists a
@@ -25,7 +25,9 @@ function handle_list_artists_admin(): void {
          LEFT JOIN users u ON u.id = a.assigned_staff_id
          $where
          ORDER BY a.sort_order, a.name"
-    )->execute($params)->fetchAll();
+    );
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
 
     foreach ($rows as &$r) {
         $r['id']      = (int)$r['id'];
@@ -42,16 +44,18 @@ function handle_create_artist(): void {
     $user = require_permission('manage_artists');
     verify_csrf();
 
-    $b                = body();
-    $dept_id          = (int)($b['dept_id'] ?? 0);
-    $name             = trim($b['name'] ?? '');
-    $sort_order       = (int)($b['sort_order'] ?? 0);
+    $b                 = body();
+    $dept_id           = (int)($b['dept_id'] ?? 0);
+    $name              = trim($b['name'] ?? '');
+    $sort_order        = (int)($b['sort_order'] ?? 0);
     $assigned_staff_id = isset($b['assigned_staff_id']) ? (int)$b['assigned_staff_id'] : null;
 
     if (!$dept_id || $name === '') json_error('dept_id and name required');
 
     // Verify this dept uses artists
-    $dept = db()->prepare('SELECT sub_entity FROM departments WHERE id = ?')->execute([$dept_id])->fetch();
+    $dept_stmt = db()->prepare('SELECT sub_entity FROM departments WHERE id = ?');
+    $dept_stmt->execute([$dept_id]);
+    $dept = $dept_stmt->fetch();
     if (!$dept || $dept['sub_entity'] !== 'artist') {
         json_error('Department does not use artists');
     }
@@ -63,11 +67,13 @@ function handle_create_artist(): void {
 
     // Resolve assigned_staff by username if string provided
     if (isset($b['assigned_staff_username']) && !$assigned_staff_id) {
-        $u = db()->prepare(
+        $u_stmt = db()->prepare(
             'SELECT u.id FROM users u
              JOIN user_dept_roles udr ON udr.user_id = u.id
              WHERE u.username = ? AND udr.dept_id = ?'
-        )->execute([trim($b['assigned_staff_username']), $dept_id])->fetch();
+        );
+        $u_stmt->execute([trim($b['assigned_staff_username']), $dept_id]);
+        $u = $u_stmt->fetch();
         if ($u) $assigned_staff_id = (int)$u['id'];
     }
 
@@ -93,7 +99,9 @@ function handle_update_artist(): void {
     $id = (int)($b['id'] ?? 0);
     if (!$id) json_error('id required');
 
-    $artist = db()->prepare('SELECT dept_id FROM artists WHERE id = ?')->execute([$id])->fetch();
+    $artist_stmt = db()->prepare('SELECT dept_id FROM artists WHERE id = ?');
+    $artist_stmt->execute([$id]);
+    $artist = $artist_stmt->fetch();
     if (!$artist) json_error('Artist not found', 404);
 
     if (!has_permission('manage_departments') && !in_array((int)$artist['dept_id'], $user['dept_ids'], true)) {
@@ -130,11 +138,11 @@ function handle_delete_artist(): void {
     $id = (int)($b['id'] ?? 0);
     if (!$id) json_error('id required');
 
-    $items = (int)db()->prepare(
-        'SELECT COUNT(*) FROM equipment_items WHERE current_artist_id = ?'
-    )->execute([$id])->fetchColumn();
-
-    if ($items > 0) json_error('Cannot delete artist with checked-out equipment', 409);
+    $count_stmt = db()->prepare('SELECT COUNT(*) FROM equipment_items WHERE current_artist_id = ?');
+    $count_stmt->execute([$id]);
+    if ((int)$count_stmt->fetchColumn() > 0) {
+        json_error('Cannot delete artist with checked-out equipment', 409);
+    }
 
     db()->prepare('DELETE FROM artists WHERE id = ?')->execute([$id]);
     json_ok(['success' => true]);
@@ -178,16 +186,18 @@ function handle_import_artists_csv(): void {
 
         $assigned_staff_id = null;
         if ($staff_i !== false && trim($row[$staff_i] ?? '') !== '') {
-            $u = db()->prepare(
+            $u_stmt = db()->prepare(
                 'SELECT u.id FROM users u JOIN user_dept_roles udr ON udr.user_id = u.id
                  WHERE u.username = ? AND udr.dept_id = ?'
-            )->execute([trim($row[$staff_i]), $dept_id])->fetch();
+            );
+            $u_stmt->execute([trim($row[$staff_i]), $dept_id]);
+            $u = $u_stmt->fetch();
             if ($u) $assigned_staff_id = (int)$u['id'];
         }
 
-        $exists = db()->prepare(
-            'SELECT id FROM artists WHERE dept_id = ? AND name = ?'
-        )->execute([$dept_id, $name])->fetch();
+        $exists_stmt = db()->prepare('SELECT id FROM artists WHERE dept_id = ? AND name = ?');
+        $exists_stmt->execute([$dept_id, $name]);
+        $exists = $exists_stmt->fetch();
 
         if ($exists) {
             db()->prepare(

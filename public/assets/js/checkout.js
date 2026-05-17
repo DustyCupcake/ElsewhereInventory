@@ -52,17 +52,17 @@ function buildAvailableModes(user) {
 }
 
 function modeEntityLabel(m = mode) {
-  const labels = { dept: 'department', person_prod: 'person', sub_barrio: 'barrio', sub_artist: 'artist', sub_person: 'person' };
+  const labels = { dept: 'team', person_prod: 'person', sub_barrio: 'barrio', sub_artist: 'artist', sub_person: 'person' };
   return labels[m] ?? 'entity';
 }
 
 function modeChipLabel(m) {
-  const labels = { dept: 'To department', person_prod: 'To person', sub_barrio: 'To barrio', sub_artist: 'To artist', sub_person: 'To person' };
+  const labels = { dept: 'To team', person_prod: 'To person', sub_barrio: 'To barrio', sub_artist: 'To artist', sub_person: 'To person' };
   return labels[m] ?? m;
 }
 
 function modeStep1Title() {
-  const labels = { dept: 'Select department', person_prod: 'Select person', sub_barrio: __('step1'), sub_artist: 'Select artist', sub_person: 'Select person' };
+  const labels = { dept: 'Select team', person_prod: 'Select person', sub_barrio: __('step1'), sub_artist: 'Select artist', sub_person: 'Select person' };
   return labels[mode] ?? 'Select';
 }
 

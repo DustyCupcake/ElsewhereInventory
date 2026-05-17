@@ -158,8 +158,10 @@ $routes = [
     ['GET',    '/admin/barrio-qr',               'routes/admin/barrio_qr.php',   'handle_barrio_qr'],
 
     // Admin — users
+    ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],
     ['GET',    '/admin/users',                   'routes/admin/users.php',       'handle_list'],
     ['POST',   '/admin/users',                   'routes/admin/users.php',       'handle_create'],
+    ['PUT',    '/admin/users/permissions',       'routes/admin/users.php',       'handle_update_permissions'],
     ['PUT',    '/admin/users',                   'routes/admin/users.php',       'handle_update'],
     ['DELETE', '/admin/users',                   'routes/admin/users.php',       'handle_delete'],
     ['POST',   '/admin/users/reset-password',    'routes/admin/users.php',       'handle_reset_password'],

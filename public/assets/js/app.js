@@ -79,12 +79,14 @@ async function boot() {
   const userEl = document.getElementById('header-user');
   if (userEl) userEl.textContent = user.display_name;
 
-  const adminLink = document.getElementById('admin-link');
-  if (adminLink && (user.role === 'production_admin' || user.role === 'admin')) adminLink.style.display = '';
-
   // Shift sessions with validate_vouchers permission and no sub_checkout
   // get a stripped-down single-mode validator view
   const perms = user.permissions || [];
+
+  const adminLink = document.getElementById('admin-link');
+  if (adminLink && (perms.includes('manage_departments') || perms.includes('manage_dept_users'))) {
+    adminLink.style.display = '';
+  }
   const isValidatorOnly = (user.role === 'validator' || user.is_shift) &&
     perms.includes('validate_vouchers') &&
     !perms.includes('checkout_equipment') &&

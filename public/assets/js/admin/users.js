@@ -1,14 +1,36 @@
 /**
  * Admin users section — list, create, update, deactivate, reset password.
+ * In dept-admin mode (manage_dept_users but not manage_users): shows
+ * dept-scoped user list with permission-override toggles only.
  */
 
 import { get, post, put } from '../api.js?v=1.0.1';
 
 let _toast;
-let _users = [];
+let _users          = [];
+let _isDeptAdmin    = false;
+let _grantablePerms = [];
+let _myDeptId       = null;
+let _searchTimer    = null;
 
-export async function initUsers(container, toast) {
+const ROLE_LABELS = {
+  production_admin: 'Production Admin',
+  production_staff: 'Production Staff',
+  dept_admin:       'Team Admin',
+  dept_staff:       'Team Staff',
+  // legacy
+  admin:     'Admin (legacy)',
+  staff:     'Staff (legacy)',
+  validator: 'Validator (legacy)',
+};
+
+export async function initUsers(container, toast, user = null) {
   _toast = toast;
+  const perms = user?.permissions ?? [];
+  _isDeptAdmin    = perms.includes('manage_dept_users') && !perms.includes('manage_users');
+  _grantablePerms = _isDeptAdmin ? perms.filter(p => p !== 'manage_dept_users') : [];
+  _myDeptId       = _isDeptAdmin ? (user?.dept_ids?.[0] ?? null) : null;
+
   renderShell(container);
   await load();
 }
@@ -18,15 +40,26 @@ function renderShell(container) {
     <div class="page-header">
       <div>
         <div class="page-title">Users</div>
-        <div class="page-subtitle">Manage who can log in and their role</div>
+        <div class="page-subtitle">${_isDeptAdmin
+          ? 'Manage permissions for your team members'
+          : 'Manage who can log in and their role'}</div>
       </div>
-      <button class="btn primary sm" onclick="window._users.openAdd()">+ Add user</button>
+      ${_isDeptAdmin ? '' : '<button class="btn primary sm" onclick="window._users.openAdd()">+ Add user</button>'}
     </div>
+    ${_isDeptAdmin ? `
+    <div class="form-card" style="margin-bottom:1rem">
+      <div class="user-panel-title" style="margin-bottom:.5rem">Add existing user to your team</div>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="text" id="user-search-input" placeholder="Search by name or username…"
+          style="flex:1" oninput="window._users.onSearch(this.value)">
+      </div>
+      <div id="user-search-results"></div>
+    </div>` : ''}
     <div id="user-form-area"></div>
     <div id="user-table-area"><div class="empty"><span class="spinner"></span></div></div>
   `;
 
-  window._users = { openAdd, openPanel, save, savePwd, toggleActive, closeForm };
+  window._users = { openAdd, openPanel, save, savePwd, toggleActive, closeForm, togglePerm, onSearch, addToTeam };
 }
 
 async function load() {
@@ -54,7 +87,7 @@ function renderTable() {
           <tr class="user-row" onclick="window._users.openPanel(${u.id})">
             <td>${esc(u.display_name)}</td>
             <td style="font-family:monospace;font-size:13px;color:var(--text2)">${esc(u.username)}</td>
-            <td><span class="badge ${u.role}">${u.role}</span></td>
+            <td><span class="badge ${u.role}">${ROLE_LABELS[u.role] ?? esc(u.role)}</span></td>
             <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
             <td style="font-size:12px;color:var(--text3)">${u.last_login ? fmtDate(u.last_login) : 'Never'}</td>
           </tr>
@@ -72,6 +105,12 @@ function openPanel(id) {
   const u = _users.find(x => x.id === id);
   if (!u) return;
   const form = document.getElementById('user-form-area');
+
+  if (_isDeptAdmin) {
+    form.innerHTML = buildPermissionsPanel(u);
+    return;
+  }
+
   form.innerHTML = `
     <div class="form-card user-panel">
       <div class="user-panel-header">
@@ -91,9 +130,7 @@ function openPanel(id) {
           <div class="field">
             <label>Role</label>
             <select id="u-role">
-              <option value="staff" ${u.role === 'staff' ? 'selected' : ''}>Staff</option>
-              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
-              <option value="validator" ${u.role === 'validator' ? 'selected' : ''}>Validator</option>
+              ${roleOptions(u.role)}
             </select>
           </div>
           <div class="field">
@@ -130,6 +167,38 @@ function openPanel(id) {
   document.getElementById('u-name').focus();
 }
 
+function buildPermissionsPanel(u) {
+  const existing = Object.fromEntries(
+    (u.permission_overrides ?? []).map(o => [o.permission, o.granted])
+  );
+
+  const toggles = _grantablePerms.map(p => `
+    <label class="perm-toggle" style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;cursor:pointer">
+      <input type="checkbox" data-perm="${p}" data-uid="${u.id}"
+        ${existing[p] === true ? 'checked' : ''}
+        onchange="window._users.togglePerm(${u.id}, '${p}', this.checked)">
+      <span style="font-family:monospace;font-size:13px">${p}</span>
+      ${existing[p] !== undefined ? `<span style="font-size:11px;color:var(--text3)">(overridden)</span>` : ''}
+    </label>
+  `).join('');
+
+  return `
+    <div class="form-card user-panel">
+      <div class="user-panel-header">
+        <span>${esc(u.display_name)}</span>
+        <button class="btn-icon" onclick="window._users.closeForm()" aria-label="Close">✕</button>
+      </div>
+      <div class="user-panel-section">
+        <div class="user-panel-title">Permission overrides</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:.75rem">
+          Grant or revoke permissions for this member. Changes take effect on their next login.
+        </p>
+        ${toggles || '<div style="color:var(--text3);font-size:13px">No grantable permissions</div>'}
+      </div>
+    </div>
+  `;
+}
+
 function closeForm() {
   document.getElementById('user-form-area').innerHTML = '';
 }
@@ -160,9 +229,7 @@ function showForm(u) {
         <div class="field">
           <label>Role</label>
           <select id="u-role">
-            <option value="staff" ${u?.role === 'staff' ? 'selected' : ''}>Staff</option>
-            <option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>Admin</option>
-            <option value="validator" ${u?.role === 'validator' ? 'selected' : ''}>Validator</option>
+            ${roleOptions(u?.role)}
           </select>
         </div>
         ${u ? `
@@ -182,6 +249,18 @@ function showForm(u) {
     </div>
   `;
   document.getElementById('u-name').focus();
+}
+
+function roleOptions(current) {
+  const roles = [
+    ['production_admin', 'Production Admin'],
+    ['production_staff', 'Production Staff'],
+    ['dept_admin',       'Team Admin'],
+    ['dept_staff',       'Team Staff'],
+  ];
+  return roles.map(([val, label]) =>
+    `<option value="${val}" ${current === val ? 'selected' : ''}>${label}</option>`
+  ).join('');
 }
 
 async function save() {
@@ -234,5 +313,60 @@ async function toggleActive(id) {
   } catch (e) { _toast('Error: ' + e.message); }
 }
 
-const esc     = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+async function togglePerm(userId, perm, granted) {
+  try {
+    await put('/admin/users/permissions', { user_id: userId, permission: perm, granted });
+    _toast(granted ? `Granted: ${perm}` : `Revoked: ${perm}`);
+    await load();
+    // Re-open the panel so overrides refresh
+    openPanel(userId);
+  } catch (e) {
+    _toast('Error: ' + e.message);
+    // Revert checkbox visually
+    const cb = document.querySelector(`input[data-perm="${perm}"][data-uid="${userId}"]`);
+    if (cb) cb.checked = !granted;
+  }
+}
+
+function onSearch(q) {
+  clearTimeout(_searchTimer);
+  const results = document.getElementById('user-search-results');
+  if (!results) return;
+  if (q.trim().length < 2) { results.innerHTML = ''; return; }
+  _searchTimer = setTimeout(async () => {
+    try {
+      const data = await get('/admin/users/search?q=' + encodeURIComponent(q.trim()));
+      const users = data.users || [];
+      if (!users.length) {
+        results.innerHTML = '<div style="padding:.5rem 0;color:var(--text3);font-size:13px">No users found outside your team</div>';
+        return;
+      }
+      results.innerHTML = `
+        <div style="margin-top:.5rem;border-top:1px solid var(--border);padding-top:.5rem">
+          ${users.map(u => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:.3rem 0">
+              <span style="font-size:14px">
+                ${esc(u.display_name)}
+                <span style="font-size:12px;color:var(--text3);margin-left:.4rem">@${esc(u.username)}</span>
+              </span>
+              <button class="btn sm" onclick="window._users.addToTeam(${u.id}, '${esc(u.display_name)}')">Add to team</button>
+            </div>
+          `).join('')}
+        </div>`;
+    } catch (e) { _toast('Search error: ' + e.message); }
+  }, 300);
+}
+
+async function addToTeam(userId, displayName) {
+  if (!_myDeptId) { _toast('No team found'); return; }
+  try {
+    await put('/admin/dept-roles', { user_id: userId, dept_id: _myDeptId, role: 'dept_staff' });
+    _toast(`${displayName} added to team`);
+    document.getElementById('user-search-input').value = '';
+    document.getElementById('user-search-results').innerHTML = '';
+    await load();
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+const esc     = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const fmtDate = s => new Date(s).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });

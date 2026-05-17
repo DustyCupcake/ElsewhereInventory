@@ -23,6 +23,7 @@ const ROLE_PERMISSIONS = [
         'sub_checkout','sub_checkin',
         'view_dept_inventory',
         'create_invites','submit_orders','label_equipment',
+        'manage_dept_users',
     ],
     'dept_staff' => [
         'view_dept_inventory','submit_orders',
@@ -89,7 +90,9 @@ function _build_auth_return(): array {
 
 // Generate a QR token for a user if they don't have one yet
 function ensure_user_qr_token(int $user_id): string {
-    $row = db()->prepare('SELECT qr_token FROM users WHERE id = ?')->execute([$user_id])->fetch();
+    $stmt = db()->prepare('SELECT qr_token FROM users WHERE id = ?');
+    $stmt->execute([$user_id]);
+    $row = $stmt->fetch();
     if (!empty($row['qr_token'])) return $row['qr_token'];
     $token = bin2hex(random_bytes(16));
     db()->prepare('UPDATE users SET qr_token = ? WHERE id = ?')->execute([$token, $user_id]);
@@ -199,18 +202,22 @@ function check_borrow_eligible(int $item_id, int $type_id): array {
     }
 
     // Check item-level rules first (more specific than type rules)
-    $item_rules = db()->prepare(
+    $item_stmt = db()->prepare(
         'SELECT allowed_dept_id, allowed_user_id FROM equipment_borrow_rules WHERE item_id = ?'
-    )->execute([$item_id])->fetchAll();
+    );
+    $item_stmt->execute([$item_id]);
+    $item_rules = $item_stmt->fetchAll();
 
     if ($item_rules) {
         return _matches_rules($item_rules, (int)$user_id, $dept_ids);
     }
 
     // Check type-level rules
-    $type_rules = db()->prepare(
+    $type_stmt = db()->prepare(
         'SELECT allowed_dept_id, allowed_user_id FROM equipment_borrow_rules WHERE equipment_type_id = ?'
-    )->execute([$type_id])->fetchAll();
+    );
+    $type_stmt->execute([$type_id]);
+    $type_rules = $type_stmt->fetchAll();
 
     if ($type_rules) {
         return _matches_rules($type_rules, (int)$user_id, $dept_ids);

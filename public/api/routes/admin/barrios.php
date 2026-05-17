@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 function handle_list(): void {
     require_method('GET');
-    require_admin();
+    require_permission('manage_barrios');
 
     $rows = db()->query('SELECT id, name, sort_order, created_at FROM barrios ORDER BY sort_order, name')->fetchAll();
     foreach ($rows as &$r) $r['id'] = (int)$r['id'];
@@ -13,7 +13,7 @@ function handle_list(): void {
 
 function handle_create(): void {
     require_method('POST');
-    require_admin();
+    require_permission('manage_barrios');
     verify_csrf();
 
     $b    = body();
@@ -36,7 +36,7 @@ function handle_create(): void {
 
 function handle_update(): void {
     require_method('PUT');
-    require_admin();
+    require_permission('manage_barrios');
     verify_csrf();
 
     $b    = body();
@@ -60,7 +60,7 @@ function handle_update(): void {
 
 function handle_delete(): void {
     require_method('DELETE');
-    require_admin();
+    require_permission('manage_barrios');
     verify_csrf();
 
     $b  = body();

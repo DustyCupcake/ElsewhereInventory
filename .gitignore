@@ -3,3 +3,4 @@
 /public/assets/icon-*.png
 .DS_Store
 /public/assets/og*.png
+.claude

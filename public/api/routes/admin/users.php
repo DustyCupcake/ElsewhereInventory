@@ -3,12 +3,31 @@ declare(strict_types=1);
 
 function handle_list(): void {
     require_method('GET');
-    require_permission('manage_users');
+    $caller     = require_auth();
+    $full_admin = has_permission('manage_users');
+    $dept_admin = has_permission('manage_dept_users');
+    if (!$full_admin && !$dept_admin) json_error('Forbidden', 403);
 
-    $rows = db()->query(
-        'SELECT id, username, display_name, role, is_active, created_at, last_login
-         FROM users ORDER BY display_name'
-    )->fetchAll();
+    if ($full_admin) {
+        $rows = db()->query(
+            'SELECT id, username, display_name, role, is_active, created_at, last_login
+             FROM users ORDER BY display_name'
+        )->fetchAll();
+    } else {
+        $dept_ids = $caller['dept_ids'];
+        if (empty($dept_ids)) { json_ok(['users' => []]); return; }
+        $placeholders = implode(',', array_fill(0, count($dept_ids), '?'));
+        $stmt = db()->prepare(
+            "SELECT DISTINCT u.id, u.username, u.display_name, u.role, u.is_active,
+                    u.created_at, u.last_login
+             FROM users u
+             JOIN user_dept_roles udr ON udr.user_id = u.id
+             WHERE udr.dept_id IN ($placeholders)
+             ORDER BY u.display_name"
+        );
+        $stmt->execute($dept_ids);
+        $rows = $stmt->fetchAll();
+    }
 
     foreach ($rows as &$r) {
         $r['id']        = (int)$r['id'];
@@ -30,12 +49,74 @@ function handle_list(): void {
             'role'      => $m['dept_role'],
         ];
     }
+
+    // Attach permission overrides
+    $user_ids = array_column($rows, 'id');
+    $overrides_by_user = [];
+    if (!empty($user_ids)) {
+        $placeholders = implode(',', array_fill(0, count($user_ids), '?'));
+        $ov_stmt = db()->prepare(
+            "SELECT user_id, permission, granted FROM user_permissions WHERE user_id IN ($placeholders)"
+        );
+        $ov_stmt->execute($user_ids);
+        foreach ($ov_stmt->fetchAll() as $o) {
+            $overrides_by_user[(int)$o['user_id']][] = [
+                'permission' => $o['permission'],
+                'granted'    => (bool)$o['granted'],
+            ];
+        }
+    }
+
     foreach ($rows as &$r) {
-        $r['dept_memberships'] = $by_user[$r['id']] ?? [];
+        $r['dept_memberships']    = $by_user[$r['id']]              ?? [];
+        $r['permission_overrides'] = $overrides_by_user[$r['id']]   ?? [];
     }
     unset($r);
 
     json_ok(['users' => $rows]);
+}
+
+function handle_update_permissions(): void {
+    require_method('PUT');
+    $caller = require_auth();
+    verify_csrf();
+
+    $full_admin = has_permission('manage_users');
+    $dept_admin = has_permission('manage_dept_users');
+    if (!$full_admin && !$dept_admin) json_error('Forbidden', 403);
+
+    $b       = body();
+    $user_id = (int)($b['user_id'] ?? 0);
+    $perm    = trim($b['permission'] ?? '');
+    $granted = (bool)($b['granted'] ?? false);
+
+    if (!$user_id || $perm === '') json_error('user_id and permission required');
+
+    if (!$full_admin) {
+        // Target user must be in one of the caller's departments
+        $caller_dept_ids = $caller['dept_ids'];
+        if (empty($caller_dept_ids)) json_error('Forbidden', 403);
+        $placeholders = implode(',', array_fill(0, count($caller_dept_ids), '?'));
+        $mem_stmt = db()->prepare(
+            "SELECT 1 FROM user_dept_roles WHERE user_id = ? AND dept_id IN ($placeholders)"
+        );
+        $mem_stmt->execute(array_merge([$user_id], $caller_dept_ids));
+        if (!$mem_stmt->fetch()) json_error('Forbidden', 403);
+
+        // Can only grant permissions the caller holds, minus manage_dept_users
+        $grantable = array_diff($caller['permissions'], ['manage_dept_users']);
+        if (!in_array($perm, $grantable, true)) json_error('Cannot grant or revoke this permission', 403);
+    }
+
+    // Upsert into user_permissions
+    $upd = db()->prepare('UPDATE user_permissions SET granted = ? WHERE user_id = ? AND permission = ?');
+    $upd->execute([$granted ? 1 : 0, $user_id, $perm]);
+    if ($upd->rowCount() === 0) {
+        db()->prepare('INSERT INTO user_permissions (user_id, permission, granted) VALUES (?, ?, ?)')
+            ->execute([$user_id, $perm, $granted ? 1 : 0]);
+    }
+
+    json_ok(['success' => true]);
 }
 
 function handle_create(): void {
@@ -173,6 +254,53 @@ function handle_delete(): void {
     json_ok(['success' => true]);
 }
 
+
+function handle_search(): void {
+    require_method('GET');
+    $caller     = require_auth();
+    $full_admin = has_permission('manage_users');
+    $dept_admin = has_permission('manage_dept_users');
+    if (!$full_admin && !$dept_admin) json_error('Forbidden', 403);
+
+    $q = trim($_GET['q'] ?? '');
+    if (strlen($q) < 2) { json_ok(['users' => []]); return; }
+
+    $search = '%' . $q . '%';
+
+    if ($full_admin) {
+        $stmt = db()->prepare(
+            'SELECT id, username, display_name, role, is_active
+             FROM users
+             WHERE (display_name LIKE ? OR username LIKE ?) AND is_active = 1
+             ORDER BY display_name LIMIT 20'
+        );
+        $stmt->execute([$search, $search]);
+    } else {
+        // Exclude users already in the caller's departments
+        $dept_ids = $caller['dept_ids'];
+        if (empty($dept_ids)) { json_ok(['users' => []]); return; }
+        $placeholders = implode(',', array_fill(0, count($dept_ids), '?'));
+        $stmt = db()->prepare(
+            "SELECT id, username, display_name, role, is_active
+             FROM users
+             WHERE (display_name LIKE ? OR username LIKE ?)
+               AND is_active = 1
+               AND id NOT IN (
+                 SELECT user_id FROM user_dept_roles WHERE dept_id IN ($placeholders)
+               )
+             ORDER BY display_name LIMIT 20"
+        );
+        $stmt->execute(array_merge([$search, $search], $dept_ids));
+    }
+
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$r) {
+        $r['id']        = (int)$r['id'];
+        $r['is_active'] = (bool)$r['is_active'];
+    }
+    unset($r);
+    json_ok(['users' => $rows]);
+}
 
 function handle_user_qr_sheet(): void {
     require_method('GET');

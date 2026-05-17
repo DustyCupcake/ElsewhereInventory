@@ -147,7 +147,7 @@ async function saveOrders(deptId, container) {
 
 async function renderAggregate(container) {
   container.innerHTML = `
-    <div class="page-header"><h2>Equipment Orders — All Departments</h2></div>
+    <div class="page-header"><h2>Equipment Orders — All Teams</h2></div>
     <div id="orders-body"><div style="text-align:center;padding:2rem">Loading…</div></div>
   `;
 
