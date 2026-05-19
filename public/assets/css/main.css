@@ -8,12 +8,15 @@
   --text: #1a1a18;
   --text2: #6b6a65;
   --text3: #9b9a95;
-  --accent: #2a5f3f;
-  --accent-light: #e8f2ec;
-  --accent-text: #1d4a2f;
-  --warn: #92500e;
-  --warn-bg: #fef3e2;
-  --warn-border: #f59e0b;
+  --accent: #FF8C12;
+  --accent-light: #fff4e0;
+  --accent-text: #c45a00;
+  --secondary: #009999;
+  --secondary-light: #e0fafa;
+  --secondary-text: #006666;
+  --warn: #a16207;
+  --warn-bg: #fefce8;
+  --warn-border: #eab308;
   --danger: #991b1b;
   --danger-bg: #fef2f2;
   --danger-border: #fca5a5;
@@ -31,12 +34,15 @@
     --text: #edecea;
     --text2: #9b9a95;
     --text3: #6b6a65;
-    --accent: #4a9a6a;
-    --accent-light: #1a2e22;
-    --accent-text: #7dc49a;
-    --warn: #f59e0b;
-    --warn-bg: #1c1505;
-    --warn-border: #92500e;
+    --accent: #FF8C12;
+    --accent-light: #2a1800;
+    --accent-text: #ffb366;
+    --secondary: #00FFFF;
+    --secondary-light: #003333;
+    --secondary-text: #00FFFF;
+    --warn: #eab308;
+    --warn-bg: #1c1900;
+    --warn-border: #a16207;
     --danger: #f87171;
     --danger-bg: #1c0505;
     --danger-border: #7f1d1d;
@@ -73,7 +79,7 @@ body {
 }
 .btn:hover { background: var(--surface2); }
 .btn:active { transform: scale(.98); }
-.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn.primary { background: var(--accent); color: #1a1a18; border-color: transparent; }
 .btn.primary:hover { opacity: .88; }
 .btn.primary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 .btn.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
@@ -222,7 +228,7 @@ label { display: block; font-size: 12px; color: var(--text2); margin-bottom: .25
   transition: background .1s, color .1s;
 }
 .lang-btn:hover { background: var(--surface2); color: var(--text); }
-.lang-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+.lang-btn.active { background: var(--accent); color: #1a1a18; border-color: transparent; }
 .side-menu-lang { padding: 8px 16px; }
 
 /* ── Placeholder text (unset times / info) ──────────────────────────────── */

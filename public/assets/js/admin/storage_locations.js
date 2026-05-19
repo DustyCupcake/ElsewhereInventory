@@ -1,0 +1,153 @@
+/**
+ * Admin: Storage Locations section.
+ * Create/edit/delete physical storage locations and print QR sheets.
+ */
+
+import { get, post, put, del } from '../api.js?v=1.0.1';
+
+let _toast;
+let _locations = [];
+
+export async function initStorageLocations(container, toast) {
+  _toast = toast;
+  renderShell(container);
+  await load();
+  render();
+}
+
+function renderShell(container) {
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Storage Locations</div>
+        <div class="page-subtitle">Physical places where equipment is stored. Print QR codes to label each spot.</div>
+      </div>
+    </div>
+    <div id="sl-form-area"></div>
+    <div id="sl-table-area"><div class="empty"><span class="spinner"></span></div></div>
+  `;
+
+  window._sl = {
+    openAdd, openEdit, save, remove, exportQR,
+  };
+}
+
+async function load() {
+  try {
+    const data = await get('/admin/storage-locations');
+    _locations = data.locations || [];
+  } catch (e) {
+    _toast('Failed to load locations: ' + e.message);
+  }
+}
+
+function render() {
+  const area   = document.getElementById('sl-table-area');
+  if (!area) return;
+
+  const addBtn    = `<button class="btn primary sm" style="margin-bottom:1rem;margin-right:.5rem" onclick="window._sl.openAdd()">+ Add location</button>`;
+  const exportBtn = `<button class="btn sm" style="margin-bottom:1rem" onclick="window._sl.exportQR()">Print QR sheet</button>`;
+
+  if (!_locations.length) {
+    area.innerHTML = addBtn + exportBtn + '<div class="empty">No storage locations yet. Add one to get started.</div>';
+    return;
+  }
+
+  area.innerHTML = addBtn + exportBtn + `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Items here</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${_locations.map(loc => `
+          <tr>
+            <td>${esc(loc.name)}</td>
+            <td style="color:var(--text2);font-size:12px">${esc(loc.description || '—')}</td>
+            <td>${loc.item_count}</td>
+            <td>
+              <div class="table-actions">
+                <button class="action-btn" onclick="window._sl.openEdit(${loc.id})">Edit</button>
+                <button class="action-btn danger" onclick="window._sl.remove(${loc.id})">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function openAdd() { showForm(null); }
+function openEdit(id) { showForm(_locations.find(l => l.id === id)); }
+
+function showForm(loc) {
+  const form = document.getElementById('sl-form-area');
+  if (!form) return;
+  form.innerHTML = `
+    <div class="form-card">
+      <h2>${loc ? 'Edit location' : 'Add storage location'}</h2>
+      <input type="hidden" id="sl-id" value="${loc?.id ?? ''}">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="sl-name" value="${esc(loc?.name ?? '')}" placeholder="e.g. Key Board, Container A" maxlength="128">
+      </div>
+      <div class="field">
+        <label>Description (optional)</label>
+        <input type="text" id="sl-desc" value="${esc(loc?.description ?? '')}" placeholder="e.g. Board near main gate" maxlength="255">
+      </div>
+      ${loc?.qr_code ? `<div class="hint" style="margin-bottom:.5rem">QR code: <code>${esc(loc.qr_code)}</code></div>` : ''}
+      <div class="form-actions">
+        <button class="btn primary sm" onclick="window._sl.save()">Save</button>
+        <button class="btn sm" onclick="document.getElementById('sl-form-area').innerHTML=''">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('sl-name')?.focus();
+}
+
+async function save() {
+  const id   = document.getElementById('sl-id')?.value;
+  const name = document.getElementById('sl-name')?.value.trim();
+  const desc = document.getElementById('sl-desc')?.value.trim();
+
+  if (!name) { _toast('Name required'); return; }
+
+  try {
+    if (id) {
+      await put(`/admin/storage-locations/${id}`, { id: +id, name, description: desc });
+      _toast('Location updated');
+    } else {
+      await post('/admin/storage-locations', { name, description: desc });
+      _toast('Location created');
+    }
+    document.getElementById('sl-form-area').innerHTML = '';
+    await load();
+    render();
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+async function remove(id) {
+  const loc = _locations.find(l => l.id === id);
+  if (loc?.item_count > 0) {
+    if (!confirm(`"${loc?.name}" has ${loc.item_count} item(s) stored here. Delete anyway?`)) return;
+  } else {
+    if (!confirm(`Delete "${loc?.name}"?`)) return;
+  }
+  try {
+    await del(`/admin/storage-locations/${id}`);
+    _toast('Location deleted');
+    await load();
+    render();
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+function exportQR() {
+  window.open('/api/admin/storage-locations/qr-sheet', '_blank');
+}
+
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -3,7 +3,7 @@
  */
 
 import { get, post } from './api.js?v=1.0.1';
-import { Scanner } from './scanner.js?v=1.0.0';
+import { Scanner, scanFeedbackSuccess, scanFeedbackError } from './scanner.js?v=1.0.1';
 import { toast, getCurrentUser } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
 import { init as initValidate, destroy as destroyValidate } from './validate.js?v=1.0.1';
@@ -13,9 +13,10 @@ import { t } from './i18n.js?v=1.0.0';
 const __ = (key) => t('checkin', key);
 const _c = (key) => t('common', key);
 
-let scanner      = null;
-let lastItem     = null;
-let mode         = 'return'; // 'return' | 'validate' | 'activate'
+let scanner         = null;
+let lastItem        = null;
+let pendingLocation = null; // { id, name, qr_code } when user has scanned a location first
+let mode            = 'return'; // 'return' | 'validate' | 'activate'
 
 export function init(container) {
   render(container);
@@ -23,12 +24,14 @@ export function init(container) {
 
 export function destroy() {
   if (scanner) { scanner.stop(); scanner = null; }
+  pendingLocation = null;
   destroyValidate();
   destroyActivate();
 }
 
 function render(container) {
-  lastItem = null;
+  lastItem        = null;
+  pendingLocation = null;
 
   const toggleHTML = `
     <div class="mode-toggle-wrap">
@@ -60,9 +63,14 @@ function render(container) {
 
   if (scanner) { scanner.stop(); scanner = null; }
 
+  const locationHint = pendingLocation
+    ? `<div class="location-pending-badge">📍 ${pendingLocation.name} — now scan the item</div>`
+    : '';
+
   container.innerHTML = toggleHTML + `
     <div class="card">
       <div class="card-label">Scan item to return</div>
+      ${locationHint}
       <div class="video-wrap" id="ci-video-wrap">
         <video id="ci-video" playsinline muted></video>
         <div class="scan-overlay"><div class="scan-frame"><div class="scan-line"></div></div></div>
@@ -119,10 +127,23 @@ async function handleScan(qr, container) {
     render(container);
   };
 
-  const doConfirmReturn = async () => {
+  // Build the action that triggers the actual checkin POST
+  const doConfirmReturn = async (itemQr) => {
     scanOverlay.hide();
-    await confirmCheckin(qr, container);
+    await confirmCheckin(itemQr, container);
   };
+
+  // ── Check if this QR is a storage location first ─────────────────────────
+  try {
+    const locData = await get('/locations/lookup', { qr });
+    if (locData && locData.type === 'storage_location') {
+      pendingLocation = { id: locData.id, name: locData.name, qr_code: qr };
+      scanFeedbackSuccess();
+      render(container); // re-render with "now scan the item" badge
+      startScanner(container);
+      return;
+    }
+  } catch { /* not a location — continue with item lookup */ }
 
   try {
     let item;
@@ -138,10 +159,10 @@ async function handleScan(qr, container) {
     }
 
     lastItem = item;
+    scanFeedbackSuccess();
 
     if (item.status === 'available') {
       if (item.borrowable && item.borrow_eligible) {
-        // Item can be borrowed — offer person checkout
         scanOverlay.show({
           state: 'success',
           title: item.name,
@@ -152,7 +173,6 @@ async function handleScan(qr, container) {
           ],
         });
       } else if (item.borrowable && !item.borrow_eligible) {
-        // Borrowable type but this user can't borrow it
         scanOverlay.show({
           state: 'warning',
           title: item.name,
@@ -160,7 +180,6 @@ async function handleScan(qr, container) {
           buttons: [{ label: _c('ok'), action: doReset }],
         });
       } else {
-        // Not borrowable — just "already returned"
         scanOverlay.show({
           state: 'warning',
           title: item.name,
@@ -168,28 +187,70 @@ async function handleScan(qr, container) {
           buttons: [{ label: _c('ok'), action: doReset }],
         });
       }
-    } else {
-      const subtitle = _checkedOutTo(item);
-      const buttons  = [];
+      return;
+    }
 
-      // If checked out to a person and user can borrow, offer transfer
-      if (item.current_person && item.borrowable && item.borrow_eligible) {
-        buttons.push({ label: __('confirmReturn'), action: doConfirmReturn });
-        buttons.push({ label: __('borrowTransfer'), action: () => startPersonBorrowFlow(item, container, true) });
-        buttons.push({ label: _c('undo'), action: doReset });
-      } else {
-        buttons.push({ label: __('confirmReturn'), action: doConfirmReturn });
-        buttons.push({ label: _c('undo'),          action: doReset });
-      }
+    // ── Checked-out item ──────────────────────────────────────────────────
+    const subtitle = _checkedOutTo(item);
+
+    // Determine location requirement
+    const requireHome = item.require_home_location;
+    const requireAny  = item.require_any_location;
+    const homeLocName = item.home_location?.name;
+
+    // If a location is required but not yet scanned, prompt for it
+    if ((requireHome || requireAny) && !pendingLocation) {
+      const hint = requireHome
+        ? `Scan location QR to return (must go to: ${homeLocName || 'home location'})`
+        : 'Scan a storage location QR to return this item';
 
       scanOverlay.show({
-        state: 'success',
+        state: 'info',
         title: item.name,
-        subtitle,
-        buttons,
+        subtitle: hint,
+        buttons: [
+          {
+            label: 'Scan location',
+            action: () => {
+              scanOverlay.hide();
+              // Remember the item and start scanner waiting for a location QR
+              lastItem = item;
+              _awaitLocationThenCheckin(item, qr, container);
+            },
+          },
+          { label: _c('cancel'), action: doReset },
+        ],
       });
+      return;
     }
+
+    // Build location subtitle addition
+    let locSubtitle = subtitle;
+    if (pendingLocation) {
+      locSubtitle = (subtitle ? subtitle + ' · ' : '') + '📍 ' + pendingLocation.name;
+    }
+
+    const buttons = [];
+
+    if (item.current_person && item.borrowable && item.borrow_eligible) {
+      buttons.push({ label: __('confirmReturn'), action: () => doConfirmReturn(qr) });
+      buttons.push({ label: __('borrowTransfer'), action: () => startPersonBorrowFlow(item, container, true) });
+      buttons.push({ label: _c('undo'), action: doReset });
+    } else {
+      buttons.push({ label: __('confirmReturn'), action: () => doConfirmReturn(qr) });
+      buttons.push({ label: _c('undo'),          action: doReset });
+    }
+
+    scanOverlay.show({
+      state: 'success',
+      title: item.name,
+      subtitle: locSubtitle,
+      buttons,
+    });
+
   } catch (e) {
+    scanFeedbackError();
+
     const doManual = () => {
       scanOverlay.showManualEntry({
         placeholder: _c('enterManually'),
@@ -204,7 +265,7 @@ async function handleScan(qr, container) {
         title: _c('offline'),
         subtitle: __('unavailableQueue'),
         buttons: [
-          { label: __('returnAnyway'), action: doConfirmReturn },
+          { label: __('returnAnyway'), action: () => doConfirmReturn(qr) },
           { label: _c('cancel'),       action: doReset },
         ],
       });
@@ -225,18 +286,74 @@ async function handleScan(qr, container) {
   }
 }
 
+// Scan-for-location flow: shows a mini scanner waiting for a location QR,
+// then proceeds to confirm checkin with both the item and location QR.
+function _awaitLocationThenCheckin(item, itemQr, container) {
+  if (scanner) { scanner.stop(); scanner = null; }
+
+  const wrap = document.getElementById('ci-video-wrap');
+  if (wrap) {
+    const stat = document.getElementById('ci-status');
+    if (stat) stat.textContent = 'Scan storage location QR…';
+  }
+
+  const video = document.getElementById('ci-video');
+  if (!video) { render(container); return; }
+
+  scanner = new Scanner(video, async (locQr) => {
+    try {
+      const locData = await get('/locations/lookup', { qr: locQr });
+      if (!locData || locData.type !== 'storage_location') {
+        toast('That is not a storage location QR');
+        startScanner(container);
+        return;
+      }
+
+      // Validate home-location requirement
+      if (item.require_home_location && item.home_location && locData.id !== item.home_location.id) {
+        scanFeedbackError();
+        toast(`Must return to: ${item.home_location.name}`);
+        startScanner(container);
+        return;
+      }
+
+      scanFeedbackSuccess();
+      pendingLocation = { id: locData.id, name: locData.name, qr_code: locQr };
+      await confirmCheckin(itemQr, container);
+    } catch (e) {
+      scanFeedbackError();
+      toast('Location lookup failed');
+      startScanner(container);
+    }
+  });
+
+  scanner.start().catch(() => {
+    const stat = document.getElementById('ci-status');
+    if (stat) stat.textContent = _c('cameraError');
+  });
+}
+
 async function confirmCheckin(qr, container) {
+  const body = { item_qr: qr };
+  if (pendingLocation) body.location_qr = pendingLocation.qr_code;
+
   try {
-    const res = await post('/checkin', { item_qr: qr });
+    const res = await post('/checkin', body);
     if (res.__offline) {
       toast(_c('offlineSaved'));
     } else if (res.success) {
-      toast(__('returned').replace('[NAME]', lastItem?.name ?? qr));
+      const locMsg = pendingLocation ? ` → ${pendingLocation.name}` : '';
+      toast((__('returned') || 'Returned').replace('[NAME]', lastItem?.name ?? qr) + locMsg);
     } else {
       toast(__('notCheckedOut'));
     }
   } catch (e) {
-    toast('Error: ' + e.message);
+    // Server rejected due to location requirement — show as inline error
+    // and let the user try again without re-rendering
+    scanFeedbackError();
+    toast(e.message || 'Error returning item');
+    render(container);
+    return;
   }
 
   render(container);

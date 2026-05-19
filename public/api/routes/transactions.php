@@ -162,14 +162,25 @@ function handle_checkin(): void {
     $user    = require_auth();
     verify_csrf();
 
-    $b       = body();
-    $item_qr = trim($b['item_qr'] ?? '');
+    $b           = body();
+    $item_qr     = trim($b['item_qr'] ?? '');
+    $location_qr = trim($b['location_qr'] ?? '');
 
     if ($item_qr === '') json_error('item_qr required');
 
     $stmt = db()->prepare(
-        'SELECT id, status, current_dept_id, current_barrio_id, current_artist_id, current_person_id
-         FROM equipment_items WHERE qr_code = ?'
+        'SELECT i.id, i.status, i.current_dept_id, i.current_barrio_id, i.current_artist_id, i.current_person_id,
+                i.home_location_id AS item_home_location_id,
+                i.require_home_location AS item_require_home,
+                i.require_any_location AS item_require_any,
+                t.home_location_id AS type_home_location_id,
+                t.require_home_location AS type_require_home,
+                t.require_any_location AS type_require_any,
+                hl.name AS home_location_name
+         FROM equipment_items i
+         JOIN equipment_types t ON t.id = i.equipment_type_id
+         LEFT JOIN storage_locations hl ON hl.id = COALESCE(i.home_location_id, t.home_location_id)
+         WHERE i.qr_code = ?'
     );
     $stmt->execute([$item_qr]);
     $item = $stmt->fetch();
@@ -179,6 +190,44 @@ function handle_checkin(): void {
     if (!in_array($item['status'], ['checked-out', 'activated'], true)) {
         json_ok(['success' => false, 'error' => 'not_checked_out']);
         return;
+    }
+
+    // Resolve effective location requirements (item overrides type, NULL = inherit)
+    $eff_home_loc_id      = (int)(($item['item_home_location_id'] ?? null) ?? ($item['type_home_location_id'] ?? null));
+    $eff_require_home     = $item['item_require_home'] !== null
+        ? (bool)$item['item_require_home']
+        : (bool)$item['type_require_home'];
+    $eff_require_any      = $item['item_require_any'] !== null
+        ? (bool)$item['item_require_any']
+        : (bool)$item['type_require_any'];
+
+    // Resolve provided location QR to a location ID
+    $location_id = null;
+    if ($location_qr !== '') {
+        $loc_stmt = db()->prepare('SELECT id FROM storage_locations WHERE qr_code = ?');
+        $loc_stmt->execute([$location_qr]);
+        $loc = $loc_stmt->fetch();
+        if (!$loc) json_error('Storage location QR not recognised', 404);
+        $location_id = (int)$loc['id'];
+
+        // Validate against home location requirement
+        if ($eff_require_home && $eff_home_loc_id && $location_id !== $eff_home_loc_id) {
+            json_error(
+                'This item must be returned to its home location: ' . ($item['home_location_name'] ?? 'home location'),
+                422
+            );
+        }
+    }
+
+    // Enforce location scan requirements
+    if ($eff_require_home && !$location_id) {
+        json_error(
+            'Scan the home location QR to return this item: ' . ($item['home_location_name'] ?? 'home location'),
+            422
+        );
+    }
+    if ($eff_require_any && !$location_id) {
+        json_error('Scan a storage location QR to return this item', 422);
     }
 
     $dept_id      = $item['current_dept_id']    ? (int)$item['current_dept_id']    : null;
@@ -211,49 +260,49 @@ function handle_checkin(): void {
     $pdo->beginTransaction();
     try {
         if ($is_person_prod) {
-            // Return from production person back to production pool
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET status = "available", current_person_id = NULL, dept_label = NULL
+                 SET status = "available", current_person_id = NULL, dept_label = NULL,
+                     current_location_id = ?
                  WHERE id = ?'
-            )->execute([$item['id']]);
+            )->execute([$location_id, $item['id']]);
 
             $pdo->prepare(
-                'INSERT INTO transactions (type, item_id, person_id, performed_by, user_name_cache, occurred_at)
-                 VALUES ("person_checkin", ?, ?, ?, ?, NOW())'
-            )->execute([$item['id'], $person_id, $user['id'], $user['display_name']]);
+                'INSERT INTO transactions (type, item_id, person_id, location_id, performed_by, user_name_cache, occurred_at)
+                 VALUES ("person_checkin", ?, ?, ?, ?, ?, NOW())'
+            )->execute([$item['id'], $person_id, $location_id, $user['id'], $user['display_name']]);
 
         } elseif ($is_sub_lent) {
-            // Return from sub-level (barrio/artist/person) back to dept pool
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET current_barrio_id = NULL, current_artist_id = NULL, current_person_id = NULL
+                 SET current_barrio_id = NULL, current_artist_id = NULL, current_person_id = NULL,
+                     current_location_id = ?
                  WHERE id = ?'
-            )->execute([$item['id']]);
+            )->execute([$location_id, $item['id']]);
 
             $tx_type = $person_id ? 'person_checkin' : 'sub_checkin';
             $pdo->prepare(
                 'INSERT INTO transactions (type, item_id, dept_id, barrio_id, artist_id, person_id,
-                                           performed_by, user_name_cache, occurred_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+                                           location_id, performed_by, user_name_cache, occurred_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
             )->execute([
                 $tx_type, $item['id'], $dept_id, $barrio_id, $artist_id, $person_id,
-                $user['id'], $user['display_name'],
+                $location_id, $user['id'], $user['display_name'],
             ]);
 
         } else {
-            // Return from dept pool back to production pool
             $pdo->prepare(
                 'UPDATE equipment_items
                  SET status = "available", current_dept_id = NULL, dept_label = NULL,
-                     current_barrio_id = NULL, current_artist_id = NULL, current_person_id = NULL
+                     current_barrio_id = NULL, current_artist_id = NULL, current_person_id = NULL,
+                     current_location_id = ?
                  WHERE id = ?'
-            )->execute([$item['id']]);
+            )->execute([$location_id, $item['id']]);
 
             $pdo->prepare(
-                'INSERT INTO transactions (type, item_id, dept_id, performed_by, user_name_cache, occurred_at)
-                 VALUES ("checkin", ?, ?, ?, ?, NOW())'
-            )->execute([$item['id'], $dept_id, $user['id'], $user['display_name']]);
+                'INSERT INTO transactions (type, item_id, dept_id, location_id, performed_by, user_name_cache, occurred_at)
+                 VALUES ("checkin", ?, ?, ?, ?, ?, NOW())'
+            )->execute([$item['id'], $dept_id, $location_id, $user['id'], $user['display_name']]);
         }
 
         $pdo->commit();
@@ -263,7 +312,7 @@ function handle_checkin(): void {
     }
 
     $tier = $is_person_prod ? 'person_prod' : ($is_sub_lent ? 'sub' : 'dept');
-    json_ok(['success' => true, 'tier' => $tier]);
+    json_ok(['success' => true, 'tier' => $tier, 'location_id' => $location_id]);
 }
 
 // Production lending equipment directly to a named person

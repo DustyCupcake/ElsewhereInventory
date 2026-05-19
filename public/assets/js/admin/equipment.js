@@ -6,15 +6,23 @@
 import { get, post, put, del } from '../api.js?v=1.0.1';
 
 let _toast;
-let _types = [];
-let _items = [];
+let _types     = [];
+let _items     = [];
+let _locations = [];
 let _activeTab = 'types';
 
 export async function initEquipment(container, toast) {
   _toast = toast;
   renderShell(container);
-  await loadTypes();
+  await Promise.all([loadTypes(), loadLocations()]);
   switchTab('types');
+}
+
+async function loadLocations() {
+  try {
+    const data = await get('/admin/storage-locations');
+    _locations = data.locations || [];
+  } catch { _locations = []; }
 }
 
 function renderShell(container) {
@@ -75,15 +83,19 @@ function renderTypesTable() {
   }
   area.innerHTML = addBtn + `
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Active items</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Active items</th><th>Home location</th><th></th></tr></thead>
       <tbody>
         ${_types.map(t => `
           <tr>
             <td>
               ${esc(t.name)}
               ${t.secure_qr ? '<span class="badge voucher" style="margin-left:.4rem;font-size:10px">Voucher</span>' : ''}
+              ${t.borrowable ? '<span class="badge" style="margin-left:.4rem;font-size:10px;background:var(--accent-light);color:var(--accent-text)">Borrowable</span>' : ''}
             </td>
             <td>${t.item_count}</td>
+            <td style="font-size:12px;color:var(--text2)">
+              ${t.home_location_name ? esc(t.home_location_name) + (t.require_home_location ? ' ★' : '') : '—'}
+            </td>
             <td>
               <div class="table-actions">
                 <button class="action-btn" onclick="window._eq.openEditType(${t.id})">Edit</button>
@@ -105,6 +117,10 @@ function openEditType(id) {
 }
 
 function showTypeForm(t) {
+  const locOptions = _locations.map(l =>
+    `<option value="${l.id}" ${String(t?.home_location_id) === String(l.id) ? 'selected' : ''}>${esc(l.name)}</option>`
+  ).join('');
+
   const form = document.getElementById('eq-form-area');
   form.innerHTML = `
     <div class="form-card">
@@ -124,6 +140,27 @@ function showTypeForm(t) {
         <input type="checkbox" id="et-secure" ${t?.secure_qr ? 'checked' : ''}>
         Secure QR — random 5-digit codes, voucher mode
       </label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="et-borrowable" ${t?.borrowable ? 'checked' : ''}>
+        Borrowable — staff can personally check out items of this type
+      </label>
+
+      <div class="field" style="margin-top:.75rem">
+        <label>Home storage location (optional)</label>
+        <select id="et-home-loc">
+          <option value="">— None —</option>
+          ${locOptions}
+        </select>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="et-req-home" ${t?.require_home_location ? 'checked' : ''}>
+        Must be returned to its home location to count as returned
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="et-req-any" ${t?.require_any_location ? 'checked' : ''}>
+        Must scan any storage location QR when returning
+      </label>
+
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._eq.saveType()">Save</button>
         <button class="btn sm" onclick="document.getElementById('eq-form-area').innerHTML=''">Cancel</button>
@@ -134,18 +171,27 @@ function showTypeForm(t) {
 }
 
 async function saveType() {
-  const id        = document.getElementById('et-id').value;
-  const name      = document.getElementById('et-name').value.trim();
-  const cat       = document.getElementById('et-cat').value.trim();
-  const secure_qr = document.getElementById('et-secure').checked;
+  const id                  = document.getElementById('et-id').value;
+  const name                = document.getElementById('et-name').value.trim();
+  const cat                 = document.getElementById('et-cat').value.trim();
+  const secure_qr           = document.getElementById('et-secure').checked;
+  const borrowable          = document.getElementById('et-borrowable').checked;
+  const home_location_id    = document.getElementById('et-home-loc').value || null;
+  const require_home_location = document.getElementById('et-req-home').checked;
+  const require_any_location  = document.getElementById('et-req-any').checked;
+
   if (!name) { _toast('Name required'); return; }
+
+  const payload = { name, category: cat, secure_qr, borrowable,
+    home_location_id: home_location_id ? +home_location_id : null,
+    require_home_location, require_any_location };
 
   try {
     if (id) {
-      await put('/admin/equipment-types', { id: +id, name, category: cat, secure_qr });
+      await put('/admin/equipment-types', { id: +id, ...payload });
       _toast('Type updated');
     } else {
-      await post('/admin/equipment-types', { name, category: cat, secure_qr });
+      await post('/admin/equipment-types', payload);
       _toast('Type created');
     }
     document.getElementById('eq-form-area').innerHTML = '';

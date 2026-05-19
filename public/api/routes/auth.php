@@ -318,6 +318,45 @@ function handle_shift_login(): void {
     ]);
 }
 
+function handle_change_password(): void {
+    require_method('POST');
+    $user = require_auth();
+    verify_csrf();
+
+    if ($user['is_shift']) {
+        json_error('Cannot change password in shift session', 403);
+    }
+
+    $b           = body();
+    $current     = $b['current_password'] ?? '';
+    $new_pass    = $b['new_password'] ?? '';
+    $confirm     = $b['confirm_password'] ?? '';
+
+    if ($current === '' || $new_pass === '' || $confirm === '') {
+        json_error('All fields are required', 400);
+    }
+    if (strlen($new_pass) < 8) {
+        json_error('New password must be at least 8 characters', 400);
+    }
+    if ($new_pass !== $confirm) {
+        json_error('Passwords do not match', 400);
+    }
+
+    $stmt = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
+    $stmt->execute([$user['id']]);
+    $row = $stmt->fetch();
+
+    if (!$row || !password_verify($current, $row['password_hash'])) {
+        json_error('Current password is incorrect', 403);
+    }
+
+    $hash = password_hash($new_pass, PASSWORD_BCRYPT);
+    db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+        ->execute([$hash, $user['id']]);
+
+    json_ok(['success' => true]);
+}
+
 function handle_language(): void {
     require_method('POST');
     $user = require_auth();

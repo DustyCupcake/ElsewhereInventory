@@ -3,13 +3,15 @@
  * Handles session check, nav routing, and shared toast.
  */
 
-import { get, setCsrf }    from '../api.js?v=1.0.1';
-import { initBarrios }     from './barrios.js?v=1.0.1';
-import { initArtists }     from './artists.js?v=1.0.0';
-import { initEquipment }   from './equipment.js?v=1.0.1';
-import { initUsers }       from './users.js?v=1.0.2';
-import { initTeams }       from './teams.js?v=1.0.0';
-import { initConsumables } from './consumables.js?v=1.0.0';
+import { get, setCsrf }          from '../api.js?v=1.0.1';
+import { initBarrios }           from './barrios.js?v=1.0.1';
+import { initArtists }           from './artists.js?v=1.0.0';
+import { initEquipment }         from './equipment.js?v=1.0.2';
+import { initUsers }             from './users.js?v=1.1.0';
+import { initTeams }             from './teams.js?v=1.1.0';
+import { initConsumables }       from './consumables.js?v=1.0.0';
+import { initOrders }            from './orders.js?v=1.0.0';
+import { initStorageLocations }  from './storage_locations.js?v=1.0.0';
 
 let toastTimer = null;
 let _user      = null;
@@ -17,12 +19,14 @@ let _perms     = [];
 
 // Sections and the permission required to see them (any match → show)
 const SECTION_PERMS = {
-  barrios:     ['manage_barrios'],
-  artists:     ['manage_artists'],
-  equipment:   ['manage_equipment'],
-  users:       ['manage_users', 'manage_dept_users'],
-  teams:       ['manage_departments'],
-  consumables: ['manage_consumables'],
+  barrios:            ['manage_barrios'],
+  artists:            ['manage_artists'],
+  equipment:          ['manage_equipment'],
+  users:              ['manage_users', 'manage_dept_users'],
+  teams:              ['manage_departments'],
+  consumables:        ['manage_consumables'],
+  orders:             ['manage_orders'],
+  'storage-locations': ['manage_equipment'],
 };
 
 export function toast(msg, duration = 3500) {
@@ -94,12 +98,14 @@ function navigate(section) {
   if (!content) return;
 
   switch (section) {
-    case 'barrios':     initBarrios(content, toast);              break;
-    case 'artists':     initArtists(content, toast, _user);       break;
-    case 'equipment':   initEquipment(content, toast);            break;
-    case 'users':       initUsers(content, toast, _user);         break;
-    case 'teams':       initTeams(content, toast);                break;
-    case 'consumables': initConsumables(content, toast);          break;
+    case 'barrios':            initBarrios(content, toast);             break;
+    case 'artists':            initArtists(content, toast, _user);      break;
+    case 'equipment':          initEquipment(content, toast);           break;
+    case 'users':              initUsers(content, toast, _user);        break;
+    case 'teams':              initTeams(content, toast);               break;
+    case 'consumables':        initConsumables(content, toast);         break;
+    case 'orders':             initOrders(content, toast);              break;
+    case 'storage-locations':  initStorageLocations(content, toast);    break;
     default:            navigate(
       Object.keys(SECTION_PERMS).find(s => SECTION_PERMS[s].some(p => _perms.includes(p))) ?? 'barrios'
     );

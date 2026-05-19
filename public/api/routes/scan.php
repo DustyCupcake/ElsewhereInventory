@@ -163,6 +163,29 @@ function handle_scan_lookup(): void {
         json_ok($result);
     }
 
+    // ── 5. Storage location ──────────────────────────────────────────────────
+    $stmt = db()->prepare(
+        'SELECT id, name, description FROM storage_locations WHERE qr_code = ?'
+    );
+    $stmt->execute([$qr]);
+    if ($loc = $stmt->fetch()) {
+        $result = [
+            'type'        => 'storage_location',
+            'name'        => $loc['name'],
+            'description' => $loc['description'],
+            'id'          => (int)$loc['id'],
+            'qr_code'     => $qr,
+        ];
+        if ($authed) {
+            $items_stmt = db()->prepare(
+                'SELECT COUNT(*) FROM equipment_items WHERE current_location_id = ?'
+            );
+            $items_stmt->execute([$loc['id']]);
+            $result['item_count'] = (int)$items_stmt->fetchColumn();
+        }
+        json_ok($result);
+    }
+
     // ── Nothing found ────────────────────────────────────────────────────────
     json_ok(['type' => 'unknown']);
 }

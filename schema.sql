@@ -194,33 +194,52 @@ CREATE TABLE IF NOT EXISTS distribution_events (
     CONSTRAINT fk_dist_user   FOREIGN KEY (performed_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ─── Storage locations ────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS storage_locations (
+    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name        VARCHAR(128) NOT NULL,
+    description TEXT,
+    qr_code     VARCHAR(64)  NOT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_loc_qr (qr_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ─── Equipment types ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS equipment_types (
-    id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    name           VARCHAR(128) NOT NULL,
-    category       VARCHAR(64),
-    order_deadline DATETIME     NULL,
-    secure_qr      TINYINT(1)   NOT NULL DEFAULT 0,
-    borrowable     TINYINT(1)   NOT NULL DEFAULT 0,
-    created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                   INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name                 VARCHAR(128) NOT NULL,
+    category             VARCHAR(64),
+    order_deadline       DATETIME     NULL,
+    secure_qr            TINYINT(1)   NOT NULL DEFAULT 0,
+    borrowable           TINYINT(1)   NOT NULL DEFAULT 0,
+    home_location_id     INT UNSIGNED NULL,
+    require_home_location TINYINT(1)  NOT NULL DEFAULT 0,
+    require_any_location  TINYINT(1)  NOT NULL DEFAULT 0,
+    created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_name (name)
+    UNIQUE KEY uq_name (name),
+    CONSTRAINT fk_type_home_loc FOREIGN KEY (home_location_id) REFERENCES storage_locations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Equipment items ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS equipment_items (
-    id                INT UNSIGNED      NOT NULL AUTO_INCREMENT,
-    equipment_type_id INT UNSIGNED      NOT NULL,
-    item_number       SMALLINT UNSIGNED NOT NULL,
-    qr_code           VARCHAR(128)      NOT NULL,
-    status            ENUM('available','checked-out','activated','used','retired') NOT NULL DEFAULT 'available',
-    current_dept_id   INT UNSIGNED      NULL,
-    dept_label        VARCHAR(128)      NULL,
-    current_barrio_id INT UNSIGNED      NULL,
-    current_artist_id INT UNSIGNED      NULL,
-    current_person_id INT UNSIGNED      NULL,
-    notes             TEXT,
-    created_at        DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                   INT UNSIGNED      NOT NULL AUTO_INCREMENT,
+    equipment_type_id    INT UNSIGNED      NOT NULL,
+    item_number          SMALLINT UNSIGNED NOT NULL,
+    qr_code              VARCHAR(128)      NOT NULL,
+    status               ENUM('available','checked-out','activated','used','retired') NOT NULL DEFAULT 'available',
+    current_dept_id      INT UNSIGNED      NULL,
+    dept_label           VARCHAR(128)      NULL,
+    current_barrio_id    INT UNSIGNED      NULL,
+    current_artist_id    INT UNSIGNED      NULL,
+    current_person_id    INT UNSIGNED      NULL,
+    current_location_id  INT UNSIGNED      NULL,
+    home_location_id     INT UNSIGNED      NULL,
+    require_home_location TINYINT(1)       NULL,
+    require_any_location  TINYINT(1)       NULL,
+    notes                TEXT,
+    created_at           DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_qr          (qr_code),
     UNIQUE KEY uq_type_number (equipment_type_id, item_number),
@@ -229,11 +248,13 @@ CREATE TABLE IF NOT EXISTS equipment_items (
     KEY idx_barrio      (current_barrio_id),
     KEY idx_artist_item (current_artist_id),
     KEY idx_item_person (current_person_id),
-    CONSTRAINT fk_item_type   FOREIGN KEY (equipment_type_id) REFERENCES equipment_types(id),
-    CONSTRAINT fk_item_dept   FOREIGN KEY (current_dept_id)   REFERENCES departments(id)  ON DELETE SET NULL,
-    CONSTRAINT fk_item_barrio FOREIGN KEY (current_barrio_id) REFERENCES barrios(id)      ON DELETE SET NULL,
-    CONSTRAINT fk_item_artist FOREIGN KEY (current_artist_id) REFERENCES artists(id)      ON DELETE SET NULL,
-    CONSTRAINT fk_item_person FOREIGN KEY (current_person_id) REFERENCES users(id)        ON DELETE SET NULL
+    CONSTRAINT fk_item_type       FOREIGN KEY (equipment_type_id)   REFERENCES equipment_types(id),
+    CONSTRAINT fk_item_dept       FOREIGN KEY (current_dept_id)     REFERENCES departments(id)       ON DELETE SET NULL,
+    CONSTRAINT fk_item_barrio     FOREIGN KEY (current_barrio_id)   REFERENCES barrios(id)           ON DELETE SET NULL,
+    CONSTRAINT fk_item_artist     FOREIGN KEY (current_artist_id)   REFERENCES artists(id)           ON DELETE SET NULL,
+    CONSTRAINT fk_item_person     FOREIGN KEY (current_person_id)   REFERENCES users(id)             ON DELETE SET NULL,
+    CONSTRAINT fk_item_cur_loc    FOREIGN KEY (current_location_id) REFERENCES storage_locations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_item_home_loc   FOREIGN KEY (home_location_id)    REFERENCES storage_locations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Barrio equipment orders ──────────────────────────────────────────────────
@@ -272,6 +293,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     dept_id          INT UNSIGNED  NULL,
     artist_id        INT UNSIGNED  NULL,
     person_id        INT UNSIGNED  NULL,
+    location_id      INT UNSIGNED  NULL,
     performed_by     INT UNSIGNED  NULL,
     user_name_cache  VARCHAR(128)  NULL,
     is_offline_entry TINYINT(1)    NOT NULL DEFAULT 0,
@@ -286,11 +308,12 @@ CREATE TABLE IF NOT EXISTS transactions (
     KEY idx_trans_person (person_id),
     KEY idx_occurred   (occurred_at),
     KEY idx_type       (type),
-    CONSTRAINT fk_txn_item   FOREIGN KEY (item_id)      REFERENCES equipment_items(id),
-    CONSTRAINT fk_txn_barrio FOREIGN KEY (barrio_id)    REFERENCES barrios(id)      ON DELETE SET NULL,
-    CONSTRAINT fk_txn_dept   FOREIGN KEY (dept_id)      REFERENCES departments(id)  ON DELETE SET NULL,
-    CONSTRAINT fk_txn_artist FOREIGN KEY (artist_id)    REFERENCES artists(id)      ON DELETE SET NULL,
-    CONSTRAINT fk_txn_user   FOREIGN KEY (performed_by) REFERENCES users(id)        ON DELETE SET NULL
+    CONSTRAINT fk_txn_item     FOREIGN KEY (item_id)      REFERENCES equipment_items(id),
+    CONSTRAINT fk_txn_barrio   FOREIGN KEY (barrio_id)    REFERENCES barrios(id)           ON DELETE SET NULL,
+    CONSTRAINT fk_txn_dept     FOREIGN KEY (dept_id)      REFERENCES departments(id)        ON DELETE SET NULL,
+    CONSTRAINT fk_txn_artist   FOREIGN KEY (artist_id)    REFERENCES artists(id)            ON DELETE SET NULL,
+    CONSTRAINT fk_txn_user     FOREIGN KEY (performed_by) REFERENCES users(id)              ON DELETE SET NULL,
+    CONSTRAINT fk_txn_location FOREIGN KEY (location_id)  REFERENCES storage_locations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Equipment borrow rules ───────────────────────────────────────────────────

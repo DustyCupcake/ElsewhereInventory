@@ -8,7 +8,7 @@
  */
 
 import { get, post } from './api.js?v=1.0.1';
-import { Scanner } from './scanner.js?v=1.0.0';
+import { Scanner, scanFeedbackSuccess, scanFeedbackError } from './scanner.js?v=1.0.1';
 import { renderScanResult } from './scan-result.js?v=1.0.0';
 
 // Persistent session state (survives tab switches)
@@ -426,7 +426,8 @@ async function onScanAction(action, payload, rawQr, lookupData) {
     }
 
     case 'checkin': {
-      await doAction(() => post('/checkin', { item_qrs: [rawQr] }), 'Returned');
+      await doAction(() => post('/checkin', { item_qr: rawQr }), 'Returned');
+      scanFeedbackSuccess();
       overlay.style.display = 'none';
       resumeCamera();
       break;
@@ -451,8 +452,15 @@ async function onScanAction(action, payload, rawQr, lookupData) {
 async function doAction(apiFn, successMsg) {
   try {
     const result = await apiFn();
-    _toast(result.error ? ('Error: ' + result.error) : successMsg);
+    if (result.error) {
+      scanFeedbackError();
+      _toast('Error: ' + result.error);
+    } else {
+      scanFeedbackSuccess();
+      _toast(successMsg);
+    }
   } catch (e) {
+    scanFeedbackError();
     _toast('Error: ' + e.message);
   }
 }

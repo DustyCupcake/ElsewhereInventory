@@ -19,7 +19,7 @@ export function init(container) {
 
 async function renderDeptForm(container) {
   container.innerHTML = `
-    <div class="page-header"><h2>Equipment Orders</h2></div>
+    <div class="section-actions"><div style="font-size:15px">Equipment Orders</div></div>
     <div id="orders-body"><div style="text-align:center;padding:2rem">Loading…</div></div>
   `;
 
@@ -58,8 +58,7 @@ function renderDeptTable(container, orders, deptId) {
           ${o.deadline_passed
             ? '<span style="font-size:12px;color:var(--text3)">Closed</span>'
             : `<input type="number" class="order-qty-input" data-type-id="${o.equipment_type_id}"
-                 min="0" value="" placeholder="+0" inputmode="numeric"
-                 style="width:64px;text-align:center">`
+                 min="0" value="" placeholder="+0" inputmode="numeric">`
           }
         </td>
       </tr>
@@ -76,7 +75,7 @@ function renderDeptTable(container, orders, deptId) {
   body.innerHTML = `
     ${prefillBtn}
     <div class="card" style="padding:0;overflow:hidden">
-      <table class="data-table" style="width:100%">
+      <table class="inv-table" style="width:100%">
         <thead>
           <tr>
             <th>Equipment type</th>
@@ -147,7 +146,7 @@ async function saveOrders(deptId, container) {
 
 async function renderAggregate(container) {
   container.innerHTML = `
-    <div class="page-header"><h2>Equipment Orders — All Teams</h2></div>
+    <div class="section-actions"><div style="font-size:15px">Equipment Orders — All Teams</div></div>
     <div id="orders-body"><div style="text-align:center;padding:2rem">Loading…</div></div>
   `;
 
@@ -193,7 +192,7 @@ function renderAggregateTable(container, data) {
 
   body.innerHTML = `
     <div style="overflow-x:auto">
-      <table class="data-table" style="width:100%;min-width:400px">
+      <table class="inv-table" style="width:100%;min-width:400px">
         <thead>
           <tr>
             <th>Equipment type</th>

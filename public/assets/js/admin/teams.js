@@ -1,4 +1,4 @@
-import { get, put } from '../api.js?v=1.0.1';
+import { get, post, put, del } from '../api.js?v=1.0.1';
 
 let _toast;
 let _depts          = [];
@@ -20,13 +20,18 @@ function renderShell(container) {
     <div class="page-header">
       <div>
         <div class="page-title">Teams</div>
-        <div class="page-subtitle">Manage team membership and roles</div>
+        <div class="page-subtitle">Manage teams and their membership</div>
       </div>
+      <button class="btn primary sm" onclick="window._teams.openCreateTeam()">+ Create team</button>
     </div>
+    <div id="team-form-area"></div>
     <div id="teams-list"><div class="empty"><span class="spinner"></span></div></div>
     <div id="team-panel-area"></div>`;
 
-  window._teams = { toggleDept, addMember, changeMemberRole, removeMember, closePanel, searchUser };
+  window._teams = {
+    toggleDept, addMember, changeMemberRole, removeMember, closePanel, searchUser,
+    openCreateTeam, openEditTeam, saveTeam, deleteTeam, autoSlug, closeTeamForm,
+  };
 }
 
 async function loadDepts() {
@@ -42,7 +47,7 @@ function renderDeptList() {
   if (!area) return;
 
   if (!_depts.length) {
-    area.innerHTML = '<div class="empty">No departments configured</div>';
+    area.innerHTML = '<div class="empty">No teams yet — create one above</div>';
     return;
   }
 
@@ -55,10 +60,14 @@ function renderDeptList() {
             <td>${esc(d.name)}</td>
             <td style="font-size:12px;color:var(--text3)">${esc(d.sub_entity || '—')}</td>
             <td>${d.member_count}</td>
-            <td>
+            <td style="white-space:nowrap">
               <button class="btn sm" onclick="window._teams.toggleDept(${d.id})">
-                ${_expandedDeptId === d.id ? 'Close' : 'Manage members'}
+                ${_expandedDeptId === d.id ? 'Close' : 'Members'}
               </button>
+              <button class="btn sm" style="margin-left:.25rem"
+                onclick="window._teams.openEditTeam(${d.id})">Edit</button>
+              <button class="btn sm danger" style="margin-left:.25rem"
+                onclick="window._teams.deleteTeam(${d.id}, '${esc(d.name)}')">Delete</button>
               ${d.qr_code ? `<a class="btn sm" href="/api/admin/dept-qr?id=${d.id}" target="_blank"
                 style="text-decoration:none;margin-left:.25rem">QR</a>` : ''}
             </td>
@@ -66,6 +75,112 @@ function renderDeptList() {
       </tbody>
     </table>`;
 }
+
+// ── Team CRUD ────────────────────────────────────────────────────────────────
+
+function openCreateTeam() {
+  closePanel();
+  renderTeamForm(null);
+}
+
+function openEditTeam(deptId) {
+  closePanel();
+  const dept = _depts.find(d => d.id === deptId);
+  if (!dept) return;
+  renderTeamForm(dept);
+}
+
+function renderTeamForm(dept) {
+  const area = document.getElementById('team-form-area');
+  if (!area) return;
+
+  area.innerHTML = `
+    <div class="form-card" style="margin-bottom:1rem">
+      <h2>${dept ? 'Edit team' : 'Create team'}</h2>
+      <input type="hidden" id="tf-id" value="${dept?.id ?? ''}">
+      <div class="form-row">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="tf-name" value="${esc(dept?.name ?? '')}" placeholder="Sound & Stage"
+            oninput="window._teams.autoSlug(this.value)">
+        </div>
+        <div class="field">
+          <label>Slug</label>
+          <input type="text" id="tf-slug" value="${esc(dept?.slug ?? '')}" placeholder="sound_stage"
+            pattern="[a-z0-9_]+" title="Lowercase letters, digits, and underscores only">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Sub-entity type</label>
+          <select id="tf-sub">
+            <option value="none"   ${(dept?.sub_entity ?? 'none') === 'none'   ? 'selected' : ''}>None</option>
+            <option value="barrio" ${dept?.sub_entity === 'barrio' ? 'selected' : ''}>Barrio</option>
+            <option value="artist" ${dept?.sub_entity === 'artist' ? 'selected' : ''}>Artist</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Sort order</label>
+          <input type="number" id="tf-sort" value="${dept?.sort_order ?? 0}" min="0" style="width:100%">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn primary sm" onclick="window._teams.saveTeam()">
+          ${dept ? 'Save changes' : 'Create team'}
+        </button>
+        <button class="btn sm" onclick="window._teams.closeTeamForm()">Cancel</button>
+      </div>
+    </div>`;
+
+  document.getElementById('tf-name').focus();
+}
+
+function autoSlug(name) {
+  const slugEl = document.getElementById('tf-slug');
+  if (!slugEl) return;
+  slugEl.value = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+async function saveTeam() {
+  const id         = document.getElementById('tf-id').value;
+  const name       = document.getElementById('tf-name').value.trim();
+  const slug       = document.getElementById('tf-slug').value.trim();
+  const sub_entity = document.getElementById('tf-sub').value;
+  const sort_order = parseInt(document.getElementById('tf-sort').value, 10) || 0;
+
+  if (!name) { _toast('Name required'); return; }
+  if (!slug)  { _toast('Slug required'); return; }
+  if (!/^[a-z0-9_]+$/.test(slug)) { _toast('Slug must be lowercase letters, digits, and underscores only'); return; }
+
+  try {
+    if (id) {
+      await put('/admin/departments', { id: +id, name, slug, sub_entity, sort_order });
+      _toast('Team updated');
+    } else {
+      await post('/admin/departments', { name, slug, sub_entity, sort_order });
+      _toast('Team created');
+    }
+    closeTeamForm();
+    await loadDepts();
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+async function deleteTeam(deptId, name) {
+  if (!confirm(`Delete team "${name}"? This cannot be undone.`)) return;
+  try {
+    await del('/admin/departments', { id: deptId });
+    _toast(`"${name}" deleted`);
+    if (_expandedDeptId === deptId) closePanel();
+    await loadDepts();
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+function closeTeamForm() {
+  const area = document.getElementById('team-form-area');
+  if (area) area.innerHTML = '';
+}
+
+// ── Member management ────────────────────────────────────────────────────────
 
 async function toggleDept(deptId) {
   if (_expandedDeptId === deptId) {

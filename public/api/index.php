@@ -68,11 +68,16 @@ $routes = [
     ['GET',  '/voucher/status',      'routes/voucher.php',      'handle_voucher_status'],
     ['GET',  '/item/info',           'routes/item_public.php',  'handle_item_info'],
 
-    // Persons
+    // Persons & account
     ['GET',  '/person-info',         'routes/persons.php',      'handle_person_info'],
     ['GET',  '/persons',             'routes/persons.php',      'handle_person_search'],
+    ['GET',  '/persons/my-items',    'routes/persons.php',      'handle_my_items'],
+    ['POST', '/auth/change-password','routes/auth.php',         'handle_change_password'],
     ['POST', '/person-checkout',     'routes/transactions.php', 'handle_person_checkout'],
     ['POST', '/sub-person-checkout', 'routes/transactions.php', 'handle_sub_person_checkout'],
+
+    // Storage locations (public lookup)
+    ['GET',  '/locations/lookup',    'routes/locations.php',    'handle_location_lookup'],
 
     // History & sync
     ['GET',  '/history',             'routes/history.php',      'handle_history'],
@@ -159,6 +164,13 @@ $routes = [
     ['GET',    '/admin/barrio-qr',               'routes/admin/barrio_qr.php',   'handle_barrio_qr'],
     ['GET',    '/admin/dept-qr',                'routes/admin/dept_qr.php',     'handle_dept_qr'],
     ['GET',    '/my-qr',                        'routes/persons.php',           'handle_my_qr'],
+
+    // Admin — storage locations
+    ['GET',    '/admin/storage-locations',          'routes/admin/storage_locations.php', 'handle_list_locations'],
+    ['POST',   '/admin/storage-locations',          'routes/admin/storage_locations.php', 'handle_create_location'],
+    ['PUT',    '/admin/storage-locations/:id',      'routes/admin/storage_locations.php', 'handle_update_location'],
+    ['DELETE', '/admin/storage-locations/:id',      'routes/admin/storage_locations.php', 'handle_delete_location'],
+    ['GET',    '/admin/storage-locations/qr-sheet', 'routes/admin/storage_locations.php', 'handle_location_qr_sheet'],
 
     // Admin — users
     ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],

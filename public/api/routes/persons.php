@@ -113,6 +113,39 @@ body { font-family: Arial, sans-serif; background: #fff; }
     exit;
 }
 
+// Returns equipment currently checked out to the authenticated user
+function handle_my_items(): void {
+    require_method('GET');
+    $user = require_auth();
+
+    if ($user['is_shift'] || !$user['id']) {
+        json_ok(['items' => []]);
+        return;
+    }
+
+    $stmt = db()->prepare(
+        'SELECT ei.id, ei.qr_code, ei.dept_label, ei.current_location_id,
+                CONCAT(et.name, " #", ei.item_number) AS name,
+                et.category,
+                sl.name AS location_name
+         FROM equipment_items ei
+         JOIN equipment_types et ON et.id = ei.equipment_type_id
+         LEFT JOIN storage_locations sl ON sl.id = ei.current_location_id
+         WHERE ei.current_person_id = ?
+         ORDER BY et.name, ei.item_number'
+    );
+    $stmt->execute([(int)$user['id']]);
+    $items = $stmt->fetchAll();
+
+    foreach ($items as &$it) {
+        $it['id']                 = (int)$it['id'];
+        $it['current_location_id'] = $it['current_location_id'] ? (int)$it['current_location_id'] : null;
+    }
+    unset($it);
+
+    json_ok(['items' => $items]);
+}
+
 // Search staff by name — used in checkout person-selection step
 function handle_person_search(): void {
     require_method('GET');

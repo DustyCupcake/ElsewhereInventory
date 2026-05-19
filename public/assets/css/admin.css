@@ -146,8 +146,8 @@
 .badge.checked-out { background: var(--warn-bg); color: var(--warn); }
 .badge.retired { background: var(--surface2); color: var(--text3); }
 .badge.used { background: #2a1f4a; color: #b39ddb; }
-.badge.validator { background: #1a2f3a; color: #4dd0e1; }
-.badge.voucher { background: #1a2f3a; color: #4dd0e1; }
+.badge.validator { background: var(--secondary-light); color: var(--secondary-text); }
+.badge.voucher { background: var(--secondary-light); color: var(--secondary-text); }
 
 /* ── Section tabs (within admin pages) ────────────────────────────────── */
 .section-tabs {

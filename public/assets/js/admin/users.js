@@ -157,6 +157,30 @@ function openPanel(id) {
         </div>
       </div>
 
+      ${_depts.length ? `
+      <div class="user-panel-section">
+        <div class="user-panel-title">Team memberships</div>
+        ${_depts.map(d => {
+          const existing = (u.dept_memberships ?? []).find(m => m.dept_id === d.id);
+          return `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:.35rem 0;border-bottom:0.5px solid var(--border);font-size:13px">
+              <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;margin:0">
+                <input type="checkbox" class="dept-check" data-dept-id="${d.id}"
+                  ${existing ? 'checked' : ''}
+                  style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+                ${esc(d.name)}
+              </label>
+              <select data-dept-role="${d.id}"
+                style="width:auto;padding:3px 8px;font-size:12px;margin:0;${!existing ? 'opacity:.4' : ''}"
+                ${!existing ? 'disabled' : ''}>
+                <option value="dept_staff" ${existing?.role === 'dept_staff' ? 'selected' : ''}>Team Staff</option>
+                <option value="dept_admin" ${existing?.role === 'dept_admin' ? 'selected' : ''}>Team Admin</option>
+              </select>
+            </div>`;
+        }).join('')}
+      </div>` : ''}
+
       <div class="user-panel-section">
         <div class="user-panel-title">Reset password</div>
         <div class="field">
@@ -175,6 +199,14 @@ function openPanel(id) {
     </div>
   `;
   document.getElementById('u-name').focus();
+
+  // Enable/disable role selector when checkbox changes
+  document.querySelectorAll('.dept-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const sel = document.querySelector(`[data-dept-role="${cb.dataset.deptId}"]`);
+      if (sel) { sel.disabled = !cb.checked; sel.style.opacity = cb.checked ? '' : '.4'; }
+    });
+  });
 }
 
 function buildPermissionsPanel(u) {
