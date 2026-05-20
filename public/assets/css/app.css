@@ -170,7 +170,7 @@ main { padding: 1.25rem; max-width: 520px; margin: 0 auto; }
 
 /* ── Pills ─────────────────────────────────────────────────────────────── */
 .pill { display: inline-block; font-size: 11px; padding: 2px 9px; border-radius: 100px; letter-spacing: .03em; }
-.pill.available { background: var(--accent-light); color: var(--accent-text); }
+.pill.available { background: var(--secondary-light); color: var(--secondary-text); }
 .pill.out { background: var(--warn-bg); color: var(--warn); }
 
 /* ── Inventory table ───────────────────────────────────────────────────── */
@@ -188,7 +188,7 @@ main { padding: 1.25rem; max-width: 520px; margin: 0 auto; }
 .inv-table td { padding: 9px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
 .inv-table tr:last-child td { border-bottom: none; }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
-.dot.g { background: var(--accent); }
+.dot.g { background: var(--secondary); }
 .dot.a { background: var(--warn); }
 
 /* ── Stats ─────────────────────────────────────────────────────────────── */

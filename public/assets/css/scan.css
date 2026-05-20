@@ -76,7 +76,7 @@
   border-radius: 20px;
   margin-top: 4px;
 }
-.status-available  { background: var(--accent-light); color: var(--accent-text); }
+.status-available  { background: var(--secondary-light); color: var(--secondary-text); }
 .status-out        { background: #e8f0ff; color: #1a3a7a; }
 .status-activated  { background: #fff3e0; color: #7a4a00; }
 .status-used       { background: var(--surface2); color: var(--text3); }

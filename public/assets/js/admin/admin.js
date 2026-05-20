@@ -73,10 +73,22 @@ async function boot() {
     if (!allowed) a.style.display = 'none';
   });
 
+  // Mobile hamburger
+  const sidebar   = document.getElementById('admin-sidebar');
+  const backdrop  = document.getElementById('admin-mobile-backdrop');
+  const hamburger = document.getElementById('admin-hamburger-btn');
+
+  function openSidebar()  { sidebar?.classList.add('open'); backdrop?.classList.add('open'); }
+  function closeSidebar() { sidebar?.classList.remove('open'); backdrop?.classList.remove('open'); }
+
+  hamburger?.addEventListener('click', openSidebar);
+  backdrop?.addEventListener('click', closeSidebar);
+
   // Nav link clicks
   document.querySelectorAll('.admin-nav a[data-section]').forEach(a => {
     a.addEventListener('click', e => {
       e.preventDefault();
+      closeSidebar();
       navigate(a.dataset.section);
     });
   });

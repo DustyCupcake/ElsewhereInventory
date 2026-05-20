@@ -38,6 +38,73 @@ function handle_person_info(): void {
     ]);
 }
 
+// Generates a themed QR as an inline SVG string.
+// Uses QRencode::encode() to get the binary matrix directly (no GD/image needed),
+// then emits <rect> elements in a viewBox-scaled SVG.
+// $fg_hex / $bg_hex are 6-char hex strings without '#' (e.g. "1a1a18").
+function qr_generate_svg(string $data, string $fg_hex = '1a1a18', string $bg_hex = 'ffffff'): string {
+    // Returns array of strings, one per row; each char is '0' (light) or '1' (dark)
+    $frame  = QRencode::factory(QR_ECLEVEL_M)->encode($data);
+    $size   = count($frame);
+    $margin = 4; // quiet-zone in modules
+    $total  = $size + $margin * 2;
+
+    $fg_safe = htmlspecialchars('#' . $fg_hex, ENT_QUOTES);
+    $bg_safe = htmlspecialchars('#' . $bg_hex, ENT_QUOTES);
+
+    $rects = '';
+    foreach ($frame as $y => $row) {
+        $len = strlen($row);
+        for ($x = 0; $x < $len; $x++) {
+            if ($row[$x] === '1') {
+                $rx = $x + $margin;
+                $ry = $y + $margin;
+                $rects .= "<rect x=\"{$rx}\" y=\"{$ry}\" width=\"1\" height=\"1\"/>";
+            }
+        }
+    }
+
+    return '<svg xmlns="http://www.w3.org/2000/svg"'
+         . " viewBox=\"0 0 {$total} {$total}\""
+         . ' shape-rendering="crispEdges">'
+         . "<rect width=\"{$total}\" height=\"{$total}\" fill=\"{$bg_safe}\"/>"
+         . "<g fill=\"{$fg_safe}\">{$rects}</g>"
+         . '</svg>';
+}
+
+// Returns the QR as an inline SVG string in JSON for themed display.
+// Accepts ?fg=1a1a18&bg=ffffff (hex without #) to match the caller's theme.
+function handle_my_qr_img(): void {
+    require_method('GET');
+    $user = require_auth();
+
+    $qr_token = $user['qr_token'] ?? null;
+    if (!$qr_token) {
+        $qr_token = ensure_user_qr_token((int)$user['id']);
+    }
+
+    $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host     = $_SERVER['HTTP_HOST'];
+    $scan_url = $scheme . '://' . $host . '/scan?qr=' . rawurlencode($qr_token);
+
+    $use_lib = file_exists(__DIR__ . '/../../assets/vendor/phpqrcode/qrlib.php');
+    if ($use_lib) {
+        require_once __DIR__ . '/../../assets/vendor/phpqrcode/qrlib.php';
+        // Sanitise caller-supplied hex colors (strip # and non-hex chars, fall back to safe defaults)
+        $fg = preg_replace('/[^0-9a-fA-F]/', '', $_GET['fg'] ?? '1a1a18');
+        $bg = preg_replace('/[^0-9a-fA-F]/', '', $_GET['bg'] ?? 'ffffff');
+        if (strlen($fg) !== 6) $fg = '1a1a18';
+        if (strlen($bg) !== 6) $bg = 'ffffff';
+
+        $svg = qr_generate_svg($scan_url, $fg, $bg);
+        json_ok(['svg' => $svg, 'name' => $user['display_name']]);
+    } else {
+        // Fallback: external PNG (no theming)
+        $src = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' . urlencode($scan_url);
+        json_ok(['src' => $src, 'name' => $user['display_name']]);
+    }
+}
+
 // Returns the authenticated user's own QR token as a printable page
 function handle_my_qr(): void {
     require_method('GET');
@@ -52,9 +119,9 @@ function handle_my_qr(): void {
     $host     = $_SERVER['HTTP_HOST'];
     $scan_url = $scheme . '://' . $host . '/scan?qr=' . rawurlencode($qr_token);
 
-    $use_lib = file_exists(__DIR__ . '/../../../vendor/phpqrcode/qrlib.php');
+    $use_lib = file_exists(__DIR__ . '/../../assets/vendor/phpqrcode/qrlib.php');
     if ($use_lib) {
-        require_once __DIR__ . '/../../../vendor/phpqrcode/qrlib.php';
+        require_once __DIR__ . '/../../assets/vendor/phpqrcode/qrlib.php';
         ob_start();
         QRcode::png($scan_url, false, QR_ECLEVEL_M, 10, 2);
         $png = ob_get_clean();

@@ -164,6 +164,7 @@ $routes = [
     ['GET',    '/admin/barrio-qr',               'routes/admin/barrio_qr.php',   'handle_barrio_qr'],
     ['GET',    '/admin/dept-qr',                'routes/admin/dept_qr.php',     'handle_dept_qr'],
     ['GET',    '/my-qr',                        'routes/persons.php',           'handle_my_qr'],
+    ['GET',    '/my-qr-img',                    'routes/persons.php',           'handle_my_qr_img'],
 
     // Admin — storage locations
     ['GET',    '/admin/storage-locations',          'routes/admin/storage_locations.php', 'handle_list_locations'],

@@ -37,9 +37,67 @@ function openPanel(user) {
   document.getElementById('account-modal-name').textContent = user.display_name;
   modal.style.display = '';
 
+  // Reset QR cache each open so theme changes are picked up
+  const qrWrap = document.getElementById('account-qr-wrap');
+  if (qrWrap) delete qrWrap.dataset.loaded;
+  loadQr();
   loadItems();
   renderScanSettings();
   wirePasswordForm();
+}
+
+// Read a CSS variable value from the root, strip '#', return as a 6-char hex string.
+function cssHex(varName) {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName).trim().replace('#', '');
+  // Handle shorthand (#abc → aabbcc)
+  if (raw.length === 3) return raw.split('').map(c => c + c).join('');
+  return raw.slice(0, 6) || null;
+}
+
+async function loadQr() {
+  const wrap = document.getElementById('account-qr-wrap');
+  if (!wrap) return;
+  if (wrap.dataset.loaded) return;
+  wrap.dataset.loaded = '1';
+
+  wrap.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:.5rem 0">Loading…</div>';
+  try {
+    // Pass the page's actual computed text + surface colors so the QR matches the theme.
+    const fg = cssHex('--text')    || '1a1a18';
+    const bg = cssHex('--surface') || 'ffffff';
+    const data = await get(`/my-qr-img?fg=${encodeURIComponent(fg)}&bg=${encodeURIComponent(bg)}`);
+
+    if (data.svg) {
+      // Inline SVG — scales perfectly, no pixelation, fully themed
+      wrap.innerHTML = `
+        <div style="text-align:center">
+          <div style="width:min(220px,80vw);height:auto;margin:0 auto .5rem;
+            border-radius:var(--radius);border:0.5px solid var(--border-med);
+            overflow:hidden;line-height:0">
+            ${data.svg}
+          </div>
+          <a href="/api/my-qr" target="_blank"
+            style="font-size:12px;color:var(--text3);text-decoration:underline">
+            Open full-screen →
+          </a>
+        </div>`;
+    } else {
+      // Fallback for when phpqrcode isn't available (external PNG)
+      wrap.innerHTML = `
+        <div style="text-align:center">
+          <img src="${data.src}" alt="My QR code"
+            style="width:min(220px,80vw);height:auto;border-radius:var(--radius);
+            border:0.5px solid var(--border-med);display:block;margin:0 auto .5rem">
+          <a href="/api/my-qr" target="_blank"
+            style="font-size:12px;color:var(--text3);text-decoration:underline">
+            Open full-screen →
+          </a>
+        </div>`;
+    }
+  } catch {
+    wrap.innerHTML = '<a href="/api/my-qr" target="_blank" class="account-qr-link"><span class="account-qr-hint">Open full QR →</span></a>';
+  }
 }
 
 function closePanel() {

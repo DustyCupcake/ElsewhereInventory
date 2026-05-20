@@ -72,9 +72,10 @@ function renderScanning(container) {
 
   container.innerHTML = `
     <div style="position:relative">
-      <div id="scanner-video-wrap" style="position:relative;background:#000;overflow:hidden;border-radius:0">
+      <div id="scanner-video-wrap" style="position:relative;background:#000;overflow:hidden;
+        border-radius:0;width:100%;aspect-ratio:1">
         <video id="scanner-video" autoplay playsinline muted
-          style="width:100%;display:block;max-height:55vh;object-fit:cover"></video>
+          style="width:100%;height:100%;display:block;object-fit:cover"></video>
         <div id="scan-hint" style="position:absolute;bottom:12px;left:0;right:0;text-align:center;
           color:#fff;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.7);pointer-events:none">
           ${entity ? `Scanning items for <strong>${esc(entity.name)}</strong>` : 'Scan any QR code'}
@@ -99,8 +100,10 @@ function renderScanning(container) {
 
         <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
           <input id="manual-qr-input" type="text" placeholder="Or type / paste a code…"
-            style="flex:1" autocomplete="off" autocorrect="off" spellcheck="false">
-          <button class="btn" onclick="window._scanner.manualSubmit()">Go</button>
+            style="flex:1;min-width:0;width:0;font-size:16px;padding:12px 14px;margin-bottom:0"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="btn" style="margin-top:0;width:auto;flex-shrink:0;padding-left:1.25rem;padding-right:1.25rem"
+            onclick="window._scanner.manualSubmit()">Go</button>
         </div>
 
         ${!entity ? `

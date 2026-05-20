@@ -324,9 +324,9 @@ function handle_user_qr_sheet(): void {
         exit;
     }
 
-    $use_lib = file_exists(__DIR__ . '/../../../../vendor/phpqrcode/qrlib.php');
+    $use_lib = file_exists(__DIR__ . '/../../../assets/vendor/phpqrcode/qrlib.php');
     if ($use_lib) {
-        require_once __DIR__ . '/../../../../vendor/phpqrcode/qrlib.php';
+        require_once __DIR__ . '/../../../assets/vendor/phpqrcode/qrlib.php';
     }
 
     $scheme   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';

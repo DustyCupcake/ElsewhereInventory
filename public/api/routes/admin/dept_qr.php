@@ -39,9 +39,9 @@ function handle_dept_qr(): void {
     $host      = $_SERVER['HTTP_HOST'];
     $scan_url  = $scheme . '://' . $host . '/scan?qr=' . rawurlencode($dept['qr_code']);
 
-    $use_lib = file_exists(__DIR__ . '/../../../../vendor/phpqrcode/qrlib.php');
+    $use_lib = file_exists(__DIR__ . '/../../../assets/vendor/phpqrcode/qrlib.php');
     if ($use_lib) {
-        require_once __DIR__ . '/../../../../vendor/phpqrcode/qrlib.php';
+        require_once __DIR__ . '/../../../assets/vendor/phpqrcode/qrlib.php';
         ob_start();
         QRcode::png($scan_url, false, QR_ECLEVEL_M, 10, 2);
         $png = ob_get_clean();
