@@ -11,6 +11,7 @@ import { init as initHome } from './home.js?v=1.0.1';
 import { init as initScanner, destroy as destroyScanner, getSession } from './unified-scanner.js?v=1.0.2';
 import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.1';
 import { init as initAccount } from './account.js?v=1.0.1';
+import { init as initFillRequests, destroy as destroyFillRequests } from './fill-requests.js?v=1.0.0';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js?v=1.0.0').catch(() => {});
@@ -150,6 +151,10 @@ function configureSideMenu(perms) {
     (document.querySelector('[data-menu="orders"]').style.display =
       (perms.includes('submit_orders') || perms.includes('manage_orders')) ? '' : 'none');
 
+  document.querySelector('[data-menu="fill-requests"]')?.style &&
+    (document.querySelector('[data-menu="fill-requests"]').style.display =
+      perms.includes('request_fills') ? '' : 'none');
+
   const adminLink = document.getElementById('menu-admin-link');
   if (adminLink) {
     adminLink.style.display = (perms.includes('manage_departments') || perms.includes('manage_dept_users'))
@@ -176,34 +181,37 @@ function bootValidator() {
 
 function rerenderCurrentTab() {
   if (!currentTab) return;
-  if (currentTab === 'checkin')  destroyCheckin();
-  if (currentTab === 'barrios')  destroyBarrios();
-  if (currentTab === 'validate') destroyValidate();
-  if (currentTab === 'scanner')  destroyScanner();
+  if (currentTab === 'checkin')       destroyCheckin();
+  if (currentTab === 'barrios')       destroyBarrios();
+  if (currentTab === 'validate')      destroyValidate();
+  if (currentTab === 'scanner')       destroyScanner();
+  if (currentTab === 'fill-requests') destroyFillRequests();
 
   const panel = document.getElementById('tab-' + currentTab);
   if (!panel) return;
 
   switch (currentTab) {
-    case 'home':      initHome(panel, _currentUser);        break;
-    case 'scanner':   initScanner(panel, _currentUser, { onTabSwitch: switchTab, toast }); break;
-    case 'checkout':  initCheckout(panel, null);            break;
-    case 'checkin':   initCheckin(panel);                   break;
-    case 'barrios':   initBarrios(panel, null);             break;
-    case 'inventory': initInventory(panel);                 break;
-    case 'history':   initHistory(panel);                   break;
-    case 'orders':    initOrders(panel);                    break;
-    case 'validate':  initValidate(panel, true);            break;
+    case 'home':          initHome(panel, _currentUser);        break;
+    case 'scanner':       initScanner(panel, _currentUser, { onTabSwitch: switchTab, toast }); break;
+    case 'checkout':      initCheckout(panel, null);            break;
+    case 'checkin':       initCheckin(panel);                   break;
+    case 'barrios':       initBarrios(panel, null);             break;
+    case 'inventory':     initInventory(panel);                 break;
+    case 'history':       initHistory(panel);                   break;
+    case 'orders':        initOrders(panel);                    break;
+    case 'validate':      initValidate(panel, true);            break;
+    case 'fill-requests': initFillRequests(panel, _currentUser); break;
   }
 }
 
 export function switchTab(name, extra = null) {
   if (currentTab === name && !extra) return;
 
-  if (currentTab === 'checkin')  destroyCheckin();
-  if (currentTab === 'barrios')  destroyBarrios();
-  if (currentTab === 'validate') destroyValidate();
-  if (currentTab === 'scanner')  destroyScanner();
+  if (currentTab === 'checkin')       destroyCheckin();
+  if (currentTab === 'barrios')       destroyBarrios();
+  if (currentTab === 'validate')      destroyValidate();
+  if (currentTab === 'scanner')       destroyScanner();
+  if (currentTab === 'fill-requests') destroyFillRequests();
 
   currentTab = name;
 
@@ -216,15 +224,16 @@ export function switchTab(name, extra = null) {
   if (panel) panel.style.display = '';
 
   switch (name) {
-    case 'home':      initHome(panel, _currentUser);        break;
-    case 'scanner':   initScanner(panel, _currentUser, { extra, onTabSwitch: switchTab, toast, updateBannerFn: refreshSessionBanner }); break;
-    case 'checkout':  initCheckout(panel, extra);           break;
-    case 'checkin':   initCheckin(panel);                   break;
-    case 'barrios':   initBarrios(panel, extra);            break;
-    case 'inventory': initInventory(panel);                 break;
-    case 'history':   initHistory(panel);                   break;
-    case 'orders':    initOrders(panel);                    break;
-    case 'validate':  initValidate(panel, true);            break;
+    case 'home':          initHome(panel, _currentUser);        break;
+    case 'scanner':       initScanner(panel, _currentUser, { extra, onTabSwitch: switchTab, toast, updateBannerFn: refreshSessionBanner }); break;
+    case 'checkout':      initCheckout(panel, extra);           break;
+    case 'checkin':       initCheckin(panel);                   break;
+    case 'barrios':       initBarrios(panel, extra);            break;
+    case 'inventory':     initInventory(panel);                 break;
+    case 'history':       initHistory(panel);                   break;
+    case 'orders':        initOrders(panel);                    break;
+    case 'validate':      initValidate(panel, true);            break;
+    case 'fill-requests': initFillRequests(panel, _currentUser); break;
   }
 }
 

@@ -67,6 +67,15 @@ $routes = [
     ['GET',  '/scan/lookup',         'routes/scan.php',         'handle_scan_lookup'],
     ['GET',  '/voucher/status',      'routes/voucher.php',      'handle_voucher_status'],
     ['GET',  '/item/info',           'routes/item_public.php',  'handle_item_info'],
+    ['GET',  '/water/cube-status',   'routes/fill_requests.php','handle_cube_status'],
+
+    // Fill requests — noinfo staff, NWP reps, truck crew
+    ['POST',   '/fill-requests',           'routes/fill_requests.php', 'handle_create_fill_request'],
+    ['DELETE', '/fill-requests/:id',       'routes/fill_requests.php', 'handle_cancel_fill_request'],
+    ['GET',    '/fill-route',              'routes/fill_requests.php', 'handle_fill_route'],
+    ['POST',   '/fill/confirm',            'routes/fill_requests.php', 'handle_confirm_fill'],
+    ['POST',   '/fill/confirm-adhoc',      'routes/fill_requests.php', 'handle_confirm_adhoc_fill'],
+    ['GET',    '/barrios/:id/cubes',       'routes/fill_requests.php', 'handle_barrio_cubes'],
 
     // Persons & account
     ['GET',  '/person-info',         'routes/persons.php',      'handle_person_info'],
@@ -165,6 +174,16 @@ $routes = [
     ['GET',    '/admin/dept-qr',                'routes/admin/dept_qr.php',     'handle_dept_qr'],
     ['GET',    '/my-qr',                        'routes/persons.php',           'handle_my_qr'],
     ['GET',    '/my-qr-img',                    'routes/persons.php',           'handle_my_qr_img'],
+
+    // Fill direction claims (truck crew)
+    ['GET',  '/fill/direction-status',   'routes/fill_requests.php', 'handle_direction_status'],
+    ['POST', '/fill/claim-direction',    'routes/fill_requests.php', 'handle_claim_direction'],
+    ['POST', '/fill/release-direction',  'routes/fill_requests.php', 'handle_release_direction'],
+
+    // Admin — fill credits & route ordering
+    ['POST', '/admin/sell-fill-credits', 'routes/fill_requests.php', 'handle_sell_fill_credits'],
+    ['GET',  '/admin/fill-route/cubes',  'routes/fill_requests.php', 'handle_admin_fill_route_cubes'],
+    ['PUT',  '/admin/fill-route/order',  'routes/fill_requests.php', 'handle_admin_save_fill_route'],
 
     // Admin — storage locations
     ['GET',    '/admin/storage-locations',          'routes/admin/storage_locations.php', 'handle_list_locations'],

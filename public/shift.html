@@ -155,7 +155,8 @@ async function doShiftLogin() {
     document.getElementById('success-msg').textContent =
       `Welcome, ${name}! Redirecting…`;
     showView('success');
-    setTimeout(() => { window.location.href = '/'; }, 1200);
+    const dest = data.permissions?.includes('fill_truck') ? '/fill-route.html' : '/';
+    setTimeout(() => { window.location.href = dest; }, 1200);
   } catch {
     errEl.textContent = 'Network error. Check connection.';
     errEl.style.display = 'block';

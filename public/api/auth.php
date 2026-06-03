@@ -13,11 +13,13 @@ const ROLE_PERMISSIONS = [
         'manage_users','manage_departments',
         'create_invites','manage_orders','submit_orders',
         'label_equipment','manage_shifts',
+        'request_fills','fill_truck',
     ],
     'production_staff' => [
         'checkout_equipment','checkin_equipment',
         'view_inventory','view_barrios','view_artists',
         'validate_vouchers',
+        'request_fills',
     ],
     'dept_admin' => [
         'sub_checkout','sub_checkin',

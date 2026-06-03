@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Elsewhere Inventory — Fill route</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.2">
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  .fr-header {
+    padding: 1rem 1.25rem .75rem;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+  }
+  .fr-header-left { display: flex; align-items: center; gap: .75rem; }
+  .fr-logo  { font-size: 12px; color: var(--text3); }
+  .fr-logo span { color: var(--accent); }
+  .fr-title { font-size: 17px; font-weight: bold; color: var(--text); }
+
+  .fr-direction {
+    display: flex; gap: .4rem;
+  }
+  .fr-direction button {
+    padding: 6px 14px; font-size: 12px;
+    border-radius: var(--radius); cursor: pointer;
+    border: 0.5px solid var(--border-med);
+    background: var(--surface); color: var(--text2);
+    font-family: 'Georgia', serif;
+    transition: background .15s;
+  }
+  .fr-direction button.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+
+  .fr-body {
+    flex: 1; padding: 1rem 1.25rem;
+    max-width: 600px; width: 100%;
+    margin: 0 auto;
+  }
+
+  .fr-empty {
+    text-align: center; color: var(--text3); padding: 3rem 0; font-size: 14px;
+  }
+
+  .fr-stop {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    margin-bottom: .75rem;
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .fr-stop.completing {
+    opacity: .5; pointer-events: none; transition: opacity .3s;
+  }
+
+  .fr-stop-pos {
+    flex-shrink: 0;
+    width: 36px; height: 36px;
+    background: var(--accent-light);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: bold; color: var(--accent-text);
+  }
+
+  .fr-stop-info { flex: 1; min-width: 0; }
+  .fr-stop-entity {
+    font-size: 15px; color: var(--text); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fr-stop-cube {
+    font-size: 12px; color: var(--text3); margin-top: 2px;
+  }
+  .fr-stop-fills {
+    font-size: 11px; color: var(--text3); margin-top: 2px;
+  }
+
+  .fr-stop-actions { flex-shrink: 0; display: flex; flex-direction: column; gap: .4rem; }
+  .fr-fill-btn {
+    padding: 7px 14px; font-size: 13px;
+    border-radius: var(--radius); cursor: pointer;
+    border: 0.5px solid var(--accent);
+    background: var(--accent); color: #fff;
+    font-family: 'Georgia', serif;
+  }
+  .fr-fill-btn:hover { opacity: .9; }
+  .fr-skip-btn {
+    padding: 5px 12px; font-size: 12px;
+    border-radius: var(--radius); cursor: pointer;
+    border: 0.5px solid var(--border-med);
+    background: var(--surface); color: var(--text3);
+    font-family: 'Georgia', serif;
+  }
+
+  .fr-scan-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 1rem 1.25rem 1.5rem;
+    background: var(--bg);
+    border-top: 0.5px solid var(--border);
+    display: flex; gap: .75rem;
+  }
+  .fr-scan-bar .btn { flex: 1; }
+
+  .fr-scan-modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100; padding: 1.5rem;
+  }
+  .fr-scan-modal-inner {
+    width: 100%; max-width: 380px;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+  }
+  .fr-scan-modal-title {
+    font-size: 14px; font-weight: bold; color: var(--text);
+    margin-bottom: .75rem; text-align: center;
+  }
+  .fr-scan-video-wrap {
+    position: relative; width: 100%; aspect-ratio: 1;
+    background: #000; border-radius: var(--radius); overflow: hidden;
+    margin-bottom: .75rem;
+  }
+  .fr-scan-video-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fr-scan-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .fr-scan-frame {
+    width: 58%; aspect-ratio: 1;
+    border: 2px solid rgba(255,255,255,.7); border-radius: 12px;
+    position: relative; overflow: hidden;
+  }
+  .fr-scan-line {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: rgba(255,255,255,.8); animation: fr-scan 2s linear infinite;
+  }
+  @keyframes fr-scan { 0%{top:0} 50%{top:calc(100% - 2px)} 100%{top:0} }
+  .fr-scan-status { font-size: 13px; color: var(--text2); text-align: center; margin-bottom: .5rem; }
+
+  .fr-confirm-card {
+    background: var(--accent-light);
+    border: 0.5px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem; text-align: center; margin-bottom: 1rem;
+  }
+  .fr-confirm-card-title { font-size: 18px; color: var(--accent-text); font-weight: bold; margin-bottom: .25rem; }
+  .fr-confirm-card-body  { font-size: 13px; color: var(--text2); }
+
+  .fr-adhoc-card {
+    background: var(--warn-bg); border: 0.5px solid var(--warn-border);
+    border-radius: var(--radius-lg); padding: 1.1rem; margin-bottom: 1rem;
+  }
+  .fr-adhoc-card-title { font-size: 14px; font-weight: bold; color: var(--warn); margin-bottom: .5rem; }
+  .fr-adhoc-card-body  { font-size: 13px; color: var(--text2); }
+
+  .fr-logout-btn {
+    position: absolute; top: 1rem; right: 1.25rem;
+    background: none; border: none; font-size: 12px; color: var(--text3);
+    cursor: pointer; padding: 4px 8px;
+  }
+
+  /* Direction picker overlay */
+  .fr-direction-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 2rem 1.5rem;
+  }
+  .fr-direction-overlay .fr-pick-title {
+    font-size: 22px; font-weight: bold; color: var(--text);
+    margin-bottom: .4rem; text-align: center;
+  }
+  .fr-direction-overlay .fr-pick-sub {
+    font-size: 13px; color: var(--text3); margin-bottom: 2rem; text-align: center;
+  }
+  .fr-dir-cards {
+    display: flex; gap: 1rem; width: 100%; max-width: 420px;
+  }
+  .fr-dir-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    display: flex; flex-direction: column; align-items: center; gap: .5rem;
+  }
+  .fr-dir-card:hover:not(.taken) {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .fr-dir-card.taken {
+    opacity: .45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .fr-dir-card-icon { font-size: 2.5rem; }
+  .fr-dir-card-label { font-size: 16px; font-weight: bold; color: var(--text); }
+  .fr-dir-card-desc  { font-size: 12px; color: var(--text3); line-height: 1.4; }
+  .fr-dir-card-taken {
+    font-size: 11px; color: var(--warn); margin-top: .25rem;
+    background: var(--warn-bg); border-radius: 4px; padding: 2px 6px;
+  }
+
+  .fr-body-padded { padding-bottom: 148px; }
+
+  /* Next stop banner */
+  .fr-next-banner {
+    position: fixed; bottom: 72px; left: 0; right: 0; z-index: 50;
+    background: var(--accent); color: #fff;
+    padding: .55rem 1.25rem;
+    display: flex; align-items: center; gap: .75rem;
+    cursor: pointer;
+    border-top: 1px solid rgba(255,255,255,.15);
+    border-bottom: 1px solid rgba(0,0,0,.1);
+    transition: background .15s;
+  }
+  .fr-next-banner:hover { background: var(--accent-dark, #1e4d30); }
+  .fr-next-banner-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+    opacity: .8; white-space: nowrap;
+  }
+  .fr-next-banner-stop {
+    flex: 1; min-width: 0;
+    font-size: 14px; font-weight: bold;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fr-next-banner-meta {
+    font-size: 11px; opacity: .75; white-space: nowrap;
+  }
+  .fr-next-banner-arrow { font-size: 16px; opacity: .7; flex-shrink: 0; }
+
+  /* Route progress overlay */
+  .fr-progress-overlay {
+    position: fixed; inset: 0; z-index: 150;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+  }
+  .fr-progress-header {
+    padding: 1rem 1.25rem .75rem;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .fr-progress-title { font-size: 17px; font-weight: bold; color: var(--text); }
+  .fr-progress-sub   { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .fr-progress-close {
+    background: none; border: none; font-size: 20px; color: var(--text3);
+    cursor: pointer; padding: 4px 8px; line-height: 1;
+  }
+  .fr-progress-list {
+    flex: 1; overflow-y: auto; padding: .75rem 1.25rem;
+  }
+  .fr-progress-stop {
+    display: flex; align-items: center; gap: .85rem;
+    padding: .75rem 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .fr-progress-stop:last-child { border-bottom: none; }
+  .fr-progress-badge {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: bold;
+  }
+  .fr-progress-badge.filled   { background: var(--accent-light); color: var(--accent-text); }
+  .fr-progress-badge.next     { background: var(--accent); color: #fff; }
+  .fr-progress-badge.skipped  { background: var(--warn-bg); color: var(--warn); }
+  .fr-progress-badge.upcoming { background: var(--surface); color: var(--text3); border: 0.5px solid var(--border-med); }
+  .fr-progress-stop-info { flex: 1; min-width: 0; }
+  .fr-progress-stop-entity {
+    font-size: 14px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fr-progress-stop-entity.filled  { opacity: .45; text-decoration: line-through; }
+  .fr-progress-stop-entity.skipped { opacity: .55; }
+  .fr-progress-stop-cube  { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .fr-progress-stop-tag {
+    flex-shrink: 0; font-size: 10px; padding: 2px 7px;
+    border-radius: 10px; font-weight: 500; white-space: nowrap;
+  }
+  .fr-progress-stop-tag.next    { background: var(--accent-light); color: var(--accent-text); }
+  .fr-progress-stop-tag.skipped { background: var(--warn-bg); color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="fr-header">
+  <div class="fr-header-left">
+    <div>
+      <div class="fr-logo">ELSE<span>WHERE</span></div>
+      <div class="fr-title">Fill route</div>
+    </div>
+  </div>
+  <div class="fr-direction" id="fr-direction-indicator" title="Direction locked at start of run">
+    <button id="dir-asc"  title="Clockwise →">→</button>
+    <button id="dir-desc" title="Counterclockwise ←">←</button>
+  </div>
+</div>
+
+<div class="fr-body fr-body-padded" id="fr-body">
+  <!-- Filled by fill-route.js -->
+</div>
+
+<!-- Next stop banner — tappable, shows above scan bar when route is active -->
+<div class="fr-next-banner" id="fr-next-banner" style="display:none">
+  <div class="fr-next-banner-label">Next stop</div>
+  <div class="fr-next-banner-stop" id="fr-next-banner-stop"></div>
+  <div class="fr-next-banner-meta" id="fr-next-banner-meta"></div>
+  <div class="fr-next-banner-arrow">›</div>
+</div>
+
+<div class="fr-scan-bar">
+  <button class="btn" id="fr-scan-btn">Scan to confirm fill</button>
+  <button class="btn secondary" id="fr-adhoc-btn" title="Sticker-only fill (no digital request)">No request</button>
+</div>
+
+<!-- Route progress overlay — shown when banner is tapped -->
+<div class="fr-progress-overlay" id="fr-progress-overlay" style="display:none">
+  <div class="fr-progress-header">
+    <div>
+      <div class="fr-progress-title" id="fr-progress-title">Route progress</div>
+      <div class="fr-progress-sub" id="fr-progress-sub"></div>
+    </div>
+    <button class="fr-progress-close" id="fr-progress-close">✕</button>
+  </div>
+  <div class="fr-progress-list" id="fr-progress-list"></div>
+</div>
+
+<div class="fr-scan-modal" id="fr-scan-modal" style="display:none">
+  <!-- Filled by fill-route.js -->
+</div>
+
+<!-- Direction picker — shown before route, hidden after direction claimed -->
+<div class="fr-direction-overlay" id="fr-direction-overlay" style="display:none">
+  <!-- Filled by fill-route.js -->
+</div>
+
+<button class="fr-logout-btn" id="fr-logout-btn">Log out</button>
+
+<script type="module" src="/assets/js/fill-route.js?v=1.0.0"></script>
+</body>
+</html>

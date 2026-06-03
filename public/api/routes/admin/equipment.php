@@ -144,7 +144,7 @@ function handle_list_items(): void {
     $whereSQL = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
     $stmt = db()->prepare(
-        "SELECT i.id, i.qr_code, i.item_number, i.status, i.notes, i.created_at,
+        "SELECT i.id, i.qr_code, i.item_number, i.status, i.notes, i.route_position, i.created_at,
                 t.id AS type_id, t.name AS type_name, t.category,
                 CONCAT(t.name, ' #', i.item_number) AS display_name,
                 b.name AS current_barrio
@@ -241,10 +241,13 @@ function handle_update_item(): void {
     require_admin();
     verify_csrf();
 
-    $b      = body();
-    $id     = (int)($b['id'] ?? $_GET['id'] ?? 0);
-    $status = $b['status'] ?? null;
-    $notes  = $b['notes'] ?? null;
+    $b              = body();
+    $id             = (int)($b['id'] ?? $_GET['id'] ?? 0);
+    $status         = $b['status'] ?? null;
+    $notes          = $b['notes']  ?? null;
+    $route_position = array_key_exists('route_position', $b)
+        ? ($b['route_position'] === null || $b['route_position'] === '' ? null : (int)$b['route_position'])
+        : 'unset';
 
     if (!$id) json_error('id required');
     if ($status !== null && !in_array($status, ['available', 'checked-out', 'retired'], true)) {
@@ -253,8 +256,9 @@ function handle_update_item(): void {
 
     $sets   = [];
     $params = [];
-    if ($status !== null) { $sets[] = 'status = ?'; $params[] = $status; }
-    if ($notes  !== null) { $sets[] = 'notes = ?';  $params[] = $notes; }
+    if ($status !== null)            { $sets[] = 'status = ?';         $params[] = $status; }
+    if ($notes  !== null)            { $sets[] = 'notes = ?';          $params[] = $notes; }
+    if ($route_position !== 'unset') { $sets[] = 'route_position = ?'; $params[] = $route_position; }
 
     if (empty($sets)) json_error('Nothing to update');
 
