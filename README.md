@@ -11,7 +11,7 @@ The app uses a named-permission model. Base roles carry default permission sets;
 | Role | Default capabilities |
 |---|---|
 | `production_admin` | Everything |
-| `production_staff` | Checkout/checkin to departments, view inventory, validate vouchers |
+| `production_staff` | Checkout/checkin to departments, view inventory, request water fills |
 | `dept_admin` | Sub-checkout/sub-checkin to barrios/artists/persons, manage their sub-entities, create invite links, submit orders |
 | `dept_staff` | Sub-checkout/sub-checkin (sub-lending depts only), view dept inventory, submit orders |
 
@@ -87,10 +87,37 @@ Production admins see an aggregate pivot view across all departments. The Barrio
 
 - 3-step checkout flow: select entity (dept / barrio / artist / person) → scan items → confirm
 - Equipment return with full-screen confirmation overlay, showing who currently holds the item
-- Voucher validation mode — toggle in the Scan In tab
-- Voucher activation mode for dual-QR (fill + disinfection) vouchers
 - Person search by name or direct QR scan for person checkout
 - Manual code entry fallback for unreadable codes
+
+### Water fill system
+
+Replaces the old 2-QR physical voucher workflow with a persistent cube QR + digital fill request model.
+
+**Concepts:**
+- Each physical water cube has a QR code and is tracked as an `equipment_item` (type category `water_cube`). Cubes are checked out to barrios or NWP (the org managing scattered public cubes) at arrival.
+- Entities have **fill credits** tracked in `barrio_entitlements` (consumable type `water_fill`). Credits are set by production at event setup or sold on-site by staff.
+- Each cube has a **route position** — its numbered stop on the circular truck route.
+
+**Requesting a fill:**
+- **Self-service**: a barrio rep or NWP rep scans their entity QR or a cube QR in the app → selects how many fills (barrios) or which cube (NWP) → submits. Requires `request_fills` permission.
+- **In-person at noinfo**: staff scans the barrio QR or looks up by name → sees their cubes and credit balance → creates the request. Barrios can also go in person and receive a color-coded backup sticker (different color each day) to place on their cube as a physical fallback.
+- Blocked if 0 fill credits remain.
+
+**Truck run:**
+- When a truck crew shift starts, scanning their shift QR redirects to `/fill-route.html` where they choose **Clockwise (A→Z)** or **Counterclockwise (Z→A)**. The direction is locked in a `fill_run_claims` record so both trucks claim opposite directions automatically.
+- The route view shows pending stops in order with a **next stop banner** at the top. Tapping the banner opens a full progress overlay (filled ✓ / next → / skipped ↷ / upcoming).
+- Truck crew confirms fills by scanning the cube QR or tapping the stop row. If a scanned cube is not the expected next stop, an **out-of-order warning** shows which stops will be marked as skipped; the driver can confirm or cancel.
+- **Sticker fallback** (no digital request): a "No request" button opens an ad-hoc confirm flow for cubes with a physical sticker but no digital fill request. Credits are used if available; the fill is logged as `fill_adhoc`.
+
+**Public cube status page** (`/cube.html`):
+- Anyone can scan a cube QR to see its entity, last fill time, and whether a fill is requested.
+- Logged-in users with `request_fills` permission see a "Request fill" button if credits are available.
+
+**Admin: Fill Route** (`/admin/#fill-route`):
+- Drag-and-drop interface for setting route stop order (assigns `route_position` 1…N).
+- Cubes not yet on the route are listed separately and can be dragged in.
+- Accessible to `manage_barrios` or `manage_equipment` permission holders.
 
 ### Offline support
 
@@ -112,6 +139,7 @@ The full app UI is available in **English**, **Spanish**, and **French**. Langua
 - Barrio configuration (entitlements, equipment orders, consumable types, CSV import)
 - Aggregate dept orders view and barrio orders aggregate
 - Bulk QR sheet for equipment labels
+- **Fill Route** section: drag-and-drop route stop ordering for water cube fills
 
 ## Tech Stack
 
@@ -134,7 +162,9 @@ else_inventory/
 │   ├── index.html           # Main staff app
 │   ├── login.html           # Login page
 │   ├── register.html        # Invite-token registration
-│   ├── shift.html           # Shift QR login for volunteers
+│   ├── shift.html           # Shift QR login (fill_truck sessions redirect to /fill-route.html)
+│   ├── cube.html            # Public water cube status + fill request page
+│   ├── fill-route.html      # Truck crew route + direction picker
 │   ├── manifest.json        # PWA manifest
 │   ├── sw.js                # Service worker
 │   ├── admin/
@@ -157,6 +187,7 @@ else_inventory/
 │   │       ├── sync.php
 │   │       ├── voucher.php
 │   │       ├── item_public.php
+│   │       ├── fill_requests.php  # Water fill requests, route, direction claims
 │   │       └── admin/
 │   │           ├── departments.php
 │   │           ├── artists.php
@@ -175,7 +206,11 @@ else_inventory/
 │       │   ├── checkin.js
 │       │   ├── order-form.js
 │       │   ├── i18n.js
+│       │   ├── cube.js            # Public cube status page
+│       │   ├── fill-route.js      # Truck crew route + direction picker
+│       │   ├── fill-requests.js   # Noinfo/NWP fill request creation
 │       │   └── admin/
+│       │       └── fill_route.js  # Admin drag-and-drop route ordering
 │       └── vendor/          # jsqr, phpqrcode
 ├── schema.sql               # Full database schema
 ├── migrate_departments.sql  # Role + department overhaul
@@ -216,6 +251,9 @@ mysql -u your_db_user -p else_inventory < migrate_artists.sql
 mysql -u your_db_user -p else_inventory < migrate_orders.sql
 mysql -u your_db_user -p else_inventory < migrate_person_checkout.sql
 mysql -u your_db_user -p else_inventory < migrate_borrow_restrictions.sql
+mysql -u your_db_user -p else_inventory < migrate_storage_locations.sql
+mysql -u your_db_user -p else_inventory < migrate_entity_qr.sql
+mysql -u your_db_user -p else_inventory < migrate_water_cubes.sql
 ```
 
 ### 3. Set the document root
@@ -264,9 +302,9 @@ All endpoints are under `/api/`. State-changing requests require a `X-CSRF-Token
 | `POST` | `/person-checkout` | Check out borrowable items to a person (production) |
 | `POST` | `/sub-person-checkout` | Check out borrowable items to a person (dept) |
 | `PUT` | `/items/label` | Set or update dept label on a checked-out item |
-| `POST` | `/items/use` | Mark a secure QR voucher as used |
-| `POST` | `/items/activate` | Activate dual-QR vouchers |
-| `POST` | `/items/fill-confirm` | Confirm fill + disinfection |
+| `POST` | `/items/use` | Mark a secure QR voucher as used (legacy) |
+| `POST` | `/items/activate` | Activate dual-QR vouchers (legacy) |
+| `POST` | `/items/fill-confirm` | Confirm fill + disinfection (legacy) |
 
 ### People
 
@@ -296,6 +334,24 @@ All endpoints are under `/api/`. State-changing requests require a `X-CSRF-Token
 | `GET` | `/admin/dept-orders` | Aggregate orders across all depts |
 | `GET` | `/admin/barrio-orders-aggregate` | Sum of barrio equipment orders |
 
+### Water fills
+
+| Method | Endpoint | Permission | Description |
+|---|---|---|---|
+| `GET` | `/water/cube-status?qr=` | public | Cube status, last fill, credits, active request |
+| `POST` | `/fill-requests` | `request_fills` | Create fill request (entity-level or cube-specific) |
+| `DELETE` | `/fill-requests/:id` | `request_fills` | Cancel a fill request |
+| `GET` | `/fill-route?direction=` | `fill_truck` | Ordered route list for truck crew |
+| `POST` | `/fill/confirm` | `fill_truck` | Confirm fill by cube QR |
+| `POST` | `/fill/confirm-adhoc` | `fill_truck` | Confirm sticker fill (no digital request) |
+| `GET` | `/fill/direction-status` | `fill_truck` | Which directions are currently claimed |
+| `POST` | `/fill/claim-direction` | `fill_truck` | Claim CW or CCW direction for this run |
+| `POST` | `/fill/release-direction` | `fill_truck` | Release direction claim on logout |
+| `GET` | `/barrios/:id/cubes` | `request_fills` | Barrio's cubes with credit balance |
+| `POST` | `/admin/sell-fill-credits` | `manage_consumables` | Log on-site fill credit purchase |
+| `GET` | `/admin/fill-route/cubes` | `manage_barrios` | All cube items for route admin |
+| `PUT` | `/admin/fill-route/order` | `manage_barrios` | Save route stop order |
+
 ### Misc
 
 | Method | Endpoint | Description |
@@ -303,7 +359,7 @@ All endpoints are under `/api/`. State-changing requests require a `X-CSRF-Token
 | `GET` | `/history` | Transaction history |
 | `POST` | `/sync/offline-queue` | Sync offline queue |
 | `GET` | `/camps` | List barrios (alias used by checkout UI) |
-| `GET` | `/voucher/status` | Public voucher status check |
+| `GET` | `/voucher/status` | Public voucher status check (legacy) |
 | `GET` | `/item/info` | Public item info page |
 
 Admin routes follow the pattern `/api/admin/*` and require appropriate permissions (see auth.php).
@@ -332,6 +388,8 @@ Admin routes follow the pattern `/api/admin/*` and require appropriate permissio
 | `submit_orders` | production_admin, dept_admin, dept_staff |
 | `label_equipment` | production_admin, dept_admin, dept_staff (sub-lending depts) |
 | `manage_shifts` | production_admin |
+| `request_fills` | production_admin, production_staff; also assignable to shift sessions (noinfo staff, NWP rep) |
+| `fill_truck` | production_admin; assignable to shift sessions (truck crew) |
 
 ## Security
 
