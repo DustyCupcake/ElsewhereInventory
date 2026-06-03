@@ -13,6 +13,7 @@ import { initConsumables }       from './consumables.js?v=1.0.0';
 import { initOrders }            from './orders.js?v=1.0.0';
 import { initStorageLocations }  from './storage_locations.js?v=1.0.0';
 import { initPersonTokens }      from './person_tokens.js?v=1.0.0';
+import { initFillRoute }         from './fill_route.js?v=1.0.0';
 
 let toastTimer = null;
 let _user      = null;
@@ -29,6 +30,7 @@ const SECTION_PERMS = {
   orders:             ['manage_orders'],
   'storage-locations': ['manage_equipment'],
   'person-badges':     ['manage_users'],
+  'fill-route':        ['manage_barrios', 'manage_equipment'],
 };
 
 export function toast(msg, duration = 3500) {
@@ -121,6 +123,7 @@ function navigate(section) {
     case 'orders':             initOrders(content, toast);              break;
     case 'storage-locations':  initStorageLocations(content, toast);    break;
     case 'person-badges':      initPersonTokens(content, toast);        break;
+    case 'fill-route':         initFillRoute(content, toast);           break;
     default:            navigate(
       Object.keys(SECTION_PERMS).find(s => SECTION_PERMS[s].some(p => _perms.includes(p))) ?? 'barrios'
     );
