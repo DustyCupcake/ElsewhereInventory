@@ -48,8 +48,11 @@ $routes = [
     ['GET',  '/auth/csrf',           'routes/auth.php', 'handle_csrf'],
     ['POST', '/auth/language',       'routes/auth.php', 'handle_language'],
     ['GET',  '/auth/invite-info',    'routes/auth.php', 'handle_invite_info'],
-    ['GET',  '/auth/shift-info',     'routes/auth.php', 'handle_shift_info'],
-    ['POST', '/auth/shift-login',    'routes/auth.php', 'handle_shift_login'],
+    ['GET',  '/auth/shift-info',          'routes/auth.php', 'handle_shift_info'],
+    ['POST', '/auth/shift-login',         'routes/auth.php', 'handle_shift_login'],
+    ['GET',  '/auth/person-token-info',   'routes/auth.php', 'handle_person_token_info'],
+    ['POST', '/auth/person-claim',        'routes/auth.php', 'handle_person_claim'],
+    ['POST', '/auth/person-login',        'routes/auth.php', 'handle_person_login'],
 
     // Staff — inventory & equipment ops
     ['GET',  '/camps',               'routes/camps.php',        'handle_camps'],
@@ -172,6 +175,17 @@ $routes = [
     ['PUT',    '/admin/storage-locations/:id',      'routes/admin/storage_locations.php', 'handle_update_location'],
     ['DELETE', '/admin/storage-locations/:id',      'routes/admin/storage_locations.php', 'handle_delete_location'],
     ['GET',    '/admin/storage-locations/qr-sheet', 'routes/admin/storage_locations.php', 'handle_location_qr_sheet'],
+
+    // Admin — person badge pool
+    ['GET',    '/admin/person-tokens',              'routes/admin/person_tokens.php', 'handle_list_person_tokens'],
+    ['POST',   '/admin/person-tokens',              'routes/admin/person_tokens.php', 'handle_generate_person_tokens'],
+    ['DELETE', '/admin/person-tokens/:id',          'routes/admin/person_tokens.php', 'handle_delete_person_token'],
+    ['GET',    '/admin/person-tokens/qr-sheet',     'routes/admin/person_tokens.php', 'handle_person_token_qr_sheet'],
+
+    // Admin — borrow rules
+    ['GET',    '/admin/borrow-rules',               'routes/admin/borrow_rules.php',  'handle_list_borrow_rules'],
+    ['POST',   '/admin/borrow-rules',               'routes/admin/borrow_rules.php',  'handle_add_borrow_rule'],
+    ['DELETE', '/admin/borrow-rules/:id',           'routes/admin/borrow_rules.php',  'handle_delete_borrow_rule'],
 
     // Admin — users
     ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],

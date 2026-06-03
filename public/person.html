@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Badge Sign-in</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.2">
+<style>
+  body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1rem; }
+  .box { width:100%; max-width:360px; }
+  .logo { text-align:center; font-size:22px; margin-bottom:1.75rem; }
+  .logo span { color:var(--accent); }
+  .box .card { padding:1.5rem; }
+  .badge-info { background:var(--surface2); border-radius:var(--radius); padding:.75rem 1rem;
+                margin-bottom:1.25rem; }
+  .badge-label { font-size:17px; font-weight:600; margin-bottom:.2rem; }
+  .badge-status { font-size:13px; color:var(--text2); }
+  .badge-note { font-size:12px; color:var(--text3); margin-top:.4rem; line-height:1.5; }
+  .error-msg  { font-size:13px; color:var(--danger); margin-bottom:.5rem; display:none; }
+  .status-msg { text-align:center; padding:1rem 0; }
+  .status-icon { font-size:2.5rem; margin-bottom:.5rem; }
+  .status-text { font-size:14px; color:var(--text2); line-height:1.5; }
+  .btn { margin-top:.75rem; }
+  [data-view] { display:none; }
+  [data-view].active { display:block; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3);
+             border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">ELSE<span>WHERE</span></div>
+  <div class="card">
+
+    <!-- Loading -->
+    <div data-view="loading" class="active">
+      <div class="status-msg">
+        <div class="status-icon">⏳</div>
+        <div class="status-text">Checking badge…</div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div data-view="error">
+      <div class="status-msg">
+        <div class="status-icon" style="color:var(--danger)">✕</div>
+        <div class="status-text" id="error-msg">This badge is not valid.</div>
+      </div>
+    </div>
+
+    <!-- Claim (unclaimed badge) -->
+    <div data-view="claim">
+      <div class="badge-info">
+        <div class="badge-label" id="claim-label"></div>
+        <div class="badge-status">Unclaimed badge</div>
+        <div class="badge-note">Enter your name to claim this badge. It becomes your sign-in credential for borrowing equipment.</div>
+      </div>
+      <div id="claim-error" class="error-msg"></div>
+      <div class="field">
+        <label for="claim-name">Your name</label>
+        <input type="text" id="claim-name" autocomplete="name" placeholder="Enter your full name">
+      </div>
+      <button class="btn primary" id="claim-btn" onclick="doClaim()">Claim badge</button>
+    </div>
+
+    <!-- Re-login (claimed badge) -->
+    <div data-view="login">
+      <div class="badge-info">
+        <div class="badge-label" id="login-label"></div>
+        <div class="badge-status">Claimed badge</div>
+        <div class="badge-note">Enter your name to confirm it's you and continue.</div>
+      </div>
+      <div id="login-error" class="error-msg"></div>
+      <div class="field">
+        <label for="login-name">Your name</label>
+        <input type="text" id="login-name" autocomplete="name" placeholder="Enter your name to confirm">
+      </div>
+      <button class="btn primary" id="login-btn" onclick="doLogin()">Continue</button>
+    </div>
+
+    <!-- Success -->
+    <div data-view="success">
+      <div class="status-msg">
+        <div class="status-icon" style="color:var(--accent)">✓</div>
+        <div class="status-text" id="success-msg">Signed in! Redirecting…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+
+function showView(name) {
+  document.querySelectorAll('[data-view]').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-view="${name}"]`).classList.add('active');
+}
+
+(async () => {
+  if (!token) {
+    document.getElementById('error-msg').textContent = 'No badge token in URL.';
+    showView('error'); return;
+  }
+
+  try {
+    const resp = await fetch('/api/auth/person-token-info?token=' + encodeURIComponent(token),
+      { credentials: 'include' });
+    const data = await resp.json();
+
+    if (!data.valid) {
+      document.getElementById('error-msg').textContent = 'Badge not found. It may have been deactivated.';
+      showView('error'); return;
+    }
+
+    if (data.claimed) {
+      document.getElementById('login-label').textContent = data.label || 'Personal Badge';
+      showView('login');
+      setTimeout(() => document.getElementById('login-name').focus(), 100);
+    } else {
+      document.getElementById('claim-label').textContent = data.label || 'Personal Badge';
+      showView('claim');
+      setTimeout(() => document.getElementById('claim-name').focus(), 100);
+    }
+  } catch {
+    document.getElementById('error-msg').textContent = 'Network error. Please try again.';
+    showView('error');
+  }
+})();
+
+async function doClaim() {
+  const name   = document.getElementById('claim-name').value.trim();
+  const errEl  = document.getElementById('claim-error');
+  const btn    = document.getElementById('claim-btn');
+
+  errEl.style.display = 'none';
+  if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; return; }
+  if (name.length < 2) { errEl.textContent = 'Name must be at least 2 characters.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Claiming…';
+
+  try {
+    const resp = await fetch('/api/auth/person-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ token, display_name: name }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      errEl.textContent = data.error || 'Could not claim badge';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Claim badge';
+      return;
+    }
+
+    document.getElementById('success-msg').textContent = `Welcome, ${name}! Redirecting…`;
+    showView('success');
+    setTimeout(() => { window.location.href = '/'; }, 1200);
+  } catch {
+    errEl.textContent = 'Network error. Check connection.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Claim badge';
+  }
+}
+
+async function doLogin() {
+  const name   = document.getElementById('login-name').value.trim();
+  const errEl  = document.getElementById('login-error');
+  const btn    = document.getElementById('login-btn');
+
+  errEl.style.display = 'none';
+  if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Signing in…';
+
+  try {
+    const resp = await fetch('/api/auth/person-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ token, display_name: name }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      const msg = resp.status === 401
+        ? 'Name does not match. Please enter the name used when claiming this badge.'
+        : (data.error || 'Could not sign in');
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Continue';
+      return;
+    }
+
+    document.getElementById('success-msg').textContent = `Welcome back, ${data.display_name}! Redirecting…`;
+    showView('success');
+    setTimeout(() => { window.location.href = '/'; }, 1200);
+  } catch {
+    errEl.textContent = 'Network error. Check connection.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Continue';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (document.querySelector('[data-view="claim"].active')) doClaim();
+  if (document.querySelector('[data-view="login"].active')) doLogin();
+});
+</script>
+</body>
+</html>

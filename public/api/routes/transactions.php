@@ -315,17 +315,29 @@ function handle_checkin(): void {
     json_ok(['success' => true, 'tier' => $tier, 'location_id' => $location_id]);
 }
 
-// Production lending equipment directly to a named person
+// Production lending equipment directly to a named person (or person borrowing for themselves)
 function handle_person_checkout(): void {
     require_method('POST');
-    $user = require_permission('checkout_equipment');
     verify_csrf();
 
+    // Allow: staff with checkout_equipment OR person with person_borrow (self-checkout)
+    $is_self_checkout = false;
+    if (has_permission('person_borrow') && !has_permission('checkout_equipment')) {
+        require_permission('person_borrow');
+        $is_self_checkout = true;
+    } else {
+        require_permission('checkout_equipment');
+    }
+
     $b          = body();
-    $person_qr  = trim($b['person_qr'] ?? '');
     $item_qrs   = $b['item_qrs'] ?? [];
     $force      = !empty($b['force']);
     $dept_label = isset($b['dept_label']) ? trim($b['dept_label']) : null;
+
+    // For self-checkout, use the session's own QR token as the person
+    $person_qr = $is_self_checkout
+        ? ($_SESSION['qr_token'] ?? '')
+        : trim($b['person_qr'] ?? '');
 
     if ($person_qr === '' || empty($item_qrs) || !is_array($item_qrs)) {
         json_error('person_qr and item_qrs required');
@@ -367,12 +379,31 @@ function handle_person_checkout(): void {
                 continue;
             }
 
-            // Verify the item type is borrowable and the person being checked out to is eligible
-            $tr_stmt = $pdo->prepare('SELECT borrowable FROM equipment_types WHERE id = (SELECT equipment_type_id FROM equipment_items WHERE id = ?)');
+            // Verify the item type is borrowable
+            $tr_stmt = $pdo->prepare(
+                'SELECT et.borrowable, et.id AS type_id
+                 FROM equipment_types et
+                 JOIN equipment_items ei ON ei.equipment_type_id = et.id
+                 WHERE ei.id = ?'
+            );
             $tr_stmt->execute([$item['id']]);
             $type_row = $tr_stmt->fetch();
             if (empty($type_row['borrowable'])) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_borrowable'];
+                continue;
+            }
+
+            // Enforce borrow eligibility rules
+            $elig = check_borrow_eligible((int)$item['id'], (int)$type_row['type_id']);
+            if (!$elig['eligible']) {
+                $results[] = [
+                    'qr'      => $qr,
+                    'success' => false,
+                    'error'   => 'borrow_restricted',
+                    'reason'  => $elig['reason'],
+                    'type_id' => (int)$type_row['type_id'],
+                    'item_id' => (int)$item['id'],
+                ];
                 continue;
             }
 
@@ -453,6 +484,32 @@ function handle_sub_person_checkout(): void {
             }
             if (($item['current_barrio_id'] || $item['current_artist_id'] || $item['current_person_id']) && !$force) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'already_sub_lent'];
+                continue;
+            }
+
+            // Enforce borrow eligibility rules for sub-person checkout too
+            $type_stmt2 = $pdo->prepare(
+                'SELECT et.borrowable, et.id AS type_id
+                 FROM equipment_types et
+                 JOIN equipment_items ei ON ei.equipment_type_id = et.id
+                 WHERE ei.id = ?'
+            );
+            $type_stmt2->execute([$item['id']]);
+            $type_row2 = $type_stmt2->fetch();
+            if (empty($type_row2['borrowable'])) {
+                $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_borrowable'];
+                continue;
+            }
+            $elig2 = check_borrow_eligible((int)$item['id'], (int)$type_row2['type_id']);
+            if (!$elig2['eligible']) {
+                $results[] = [
+                    'qr'      => $qr,
+                    'success' => false,
+                    'error'   => 'borrow_restricted',
+                    'reason'  => $elig2['reason'],
+                    'type_id' => (int)$type_row2['type_id'],
+                    'item_id' => (int)$item['id'],
+                ];
                 continue;
             }
 

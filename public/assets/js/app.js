@@ -12,6 +12,9 @@ import { init as initScanner, destroy as destroyScanner, getSession } from './un
 import { initLang, applyTranslations, renderSwitcher, onLangChange, setLang, getLang } from './i18n.js?v=1.0.1';
 import { init as initAccount } from './account.js?v=1.0.1';
 
+// Pending identity action — stored while the identity prompt is shown
+let _pendingIdentityAction = null;
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js?v=1.0.0').catch(() => {});
 }
@@ -43,31 +46,32 @@ async function boot() {
     if (_currentUser) post('/auth/language', { lang: getLang() }).catch(() => {});
   });
 
-  let user;
+  let user = null;
   try {
-    user = await get('/auth/me');
-    setCsrf(user.csrf_token);
-    try { localStorage.setItem('barrio_user', JSON.stringify(user)); } catch {}
+    // Use raw fetch so a 401 (not logged in) doesn't auto-redirect via api.js — guest mode is allowed
+    const meResp = await fetch('/api/auth/me', { credentials: 'include' });
+    if (meResp.ok) {
+      user = await meResp.json();
+      setCsrf(user.csrf_token);
+      try { localStorage.setItem('barrio_user', JSON.stringify(user)); } catch {}
+    }
   } catch {
+    // Network error — try offline cache
     if (!navigator.onLine) {
       try {
         const cached = localStorage.getItem('barrio_user');
         if (cached) user = JSON.parse(cached);
       } catch {}
     }
-    if (!user) {
-      window.location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
-      return;
-    }
   }
 
   _currentUser = user;
-  if (user.language) setLang(user.language);
+  if (user?.language) setLang(user.language);
 
-  const perms = user.permissions || [];
+  const perms = user?.permissions || [];
 
   // Validator-only mode: unchanged
-  const isValidatorOnly = (user.role === 'validator' || user.is_shift) &&
+  const isValidatorOnly = user && (user.role === 'validator' || user.is_shift) &&
     perms.includes('validate_vouchers') &&
     !perms.includes('checkout_equipment') &&
     !perms.includes('sub_checkout');
@@ -76,11 +80,33 @@ async function boot() {
     return;
   }
 
-  initAccount(user);
+  if (user) {
+    initAccount(user);
+  } else {
+    // Guest mode: hide account button, show sign-in link
+    const userBtn = document.getElementById('header-user-btn');
+    if (userBtn) userBtn.style.display = 'none';
+    const hamburger = document.getElementById('hamburger-btn');
+    if (hamburger) hamburger.style.display = 'none';
+    const signinLink = document.getElementById('header-signin-link');
+    if (signinLink) signinLink.style.display = '';
+  }
+
+  // Set up identity prompt modal close
+  document.getElementById('identity-modal-close')?.addEventListener('click', hideIdentityPrompt);
+  document.getElementById('identity-modal-backdrop')?.addEventListener('click', hideIdentityPrompt);
+  document.getElementById('identity-signin-btn')?.addEventListener('click', () => {
+    hideIdentityPrompt();
+    window.location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+  });
+  document.getElementById('identity-badge-btn')?.addEventListener('click', () => {
+    hideIdentityPrompt();
+    switchTab('scanner', { identityMode: true });
+  });
 
   // Side menu user label
   const menuUser = document.getElementById('side-menu-user');
-  if (menuUser) menuUser.textContent = user.display_name;
+  if (menuUser) menuUser.textContent = user?.display_name || 'Guest';
 
   // Show/hide side-menu items based on permissions
   configureSideMenu(perms);
@@ -102,7 +128,7 @@ async function boot() {
 
   document.getElementById('menu-logout-btn')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    window.location.href = '/login.html';
+    window.location.href = '/';
   });
 
   initOfflineSync(toast);
@@ -162,7 +188,7 @@ function bootValidator() {
 
   document.getElementById('menu-logout-btn')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    window.location.href = '/login.html';
+    window.location.href = '/';
   });
 
   document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
@@ -186,7 +212,7 @@ function rerenderCurrentTab() {
 
   switch (currentTab) {
     case 'home':      initHome(panel, _currentUser);        break;
-    case 'scanner':   initScanner(panel, _currentUser, { onTabSwitch: switchTab, toast }); break;
+    case 'scanner':   initScanner(panel, _currentUser, { onTabSwitch: switchTab, toast, requireIdentityFn: requireIdentity, onIdentityResolvedFn: onIdentityResolved }); break;
     case 'checkout':  initCheckout(panel, null);            break;
     case 'checkin':   initCheckin(panel);                   break;
     case 'barrios':   initBarrios(panel, null);             break;
@@ -217,7 +243,7 @@ export function switchTab(name, extra = null) {
 
   switch (name) {
     case 'home':      initHome(panel, _currentUser);        break;
-    case 'scanner':   initScanner(panel, _currentUser, { extra, onTabSwitch: switchTab, toast, updateBannerFn: refreshSessionBanner }); break;
+    case 'scanner':   initScanner(panel, _currentUser, { extra, onTabSwitch: switchTab, toast, updateBannerFn: refreshSessionBanner, requireIdentityFn: requireIdentity, onIdentityResolvedFn: onIdentityResolved }); break;
     case 'checkout':  initCheckout(panel, extra);           break;
     case 'checkin':   initCheckin(panel);                   break;
     case 'barrios':   initBarrios(panel, extra);            break;
@@ -253,6 +279,56 @@ export function refreshSessionBanner() {
     e.stopPropagation();
     switchTab('scanner', { mode: 'confirm' });
   });
+}
+
+// ─── Identity prompt ─────────────────────────────────────────────────────────
+// Call this to gate an action behind authentication.
+// If already authenticated, calls action() immediately.
+// If not, shows the identity modal; action is called after successful sign-in/claim.
+export function requireIdentity(action) {
+  if (_currentUser) {
+    action();
+  } else {
+    _pendingIdentityAction = action;
+    showIdentityPrompt();
+  }
+}
+
+export function showIdentityPrompt(message) {
+  const modal = document.getElementById('identity-modal');
+  if (!modal) return;
+  if (message) {
+    const msgEl = document.getElementById('identity-modal-message');
+    if (msgEl) msgEl.textContent = message;
+  }
+  modal.style.display = '';
+  document.getElementById('identity-modal-backdrop').style.display = '';
+}
+
+export function hideIdentityPrompt() {
+  document.getElementById('identity-modal')?.style && (document.getElementById('identity-modal').style.display = 'none');
+  document.getElementById('identity-modal-backdrop')?.style && (document.getElementById('identity-modal-backdrop').style.display = 'none');
+}
+
+// Called by scanner after a badge scan succeeds during identityMode
+export function onIdentityResolved(user) {
+  _currentUser = user;
+  setCsrf(user.csrf_token);
+  // Update header to show user name
+  const userBtn = document.getElementById('header-user-btn');
+  if (userBtn) { userBtn.textContent = user.display_name; userBtn.style.display = ''; }
+  const signinLink = document.getElementById('header-signin-link');
+  if (signinLink) signinLink.style.display = 'none';
+
+  hideIdentityPrompt();
+
+  if (_pendingIdentityAction) {
+    const action = _pendingIdentityAction;
+    _pendingIdentityAction = null;
+    action();
+  } else {
+    switchTab('home');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', boot);

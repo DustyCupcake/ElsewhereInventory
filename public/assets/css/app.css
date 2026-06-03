@@ -768,3 +768,56 @@ main { padding: 1.25rem; max-width: 520px; margin: 0 auto; }
   padding: 6px 10px;
   margin-bottom: .6rem;
 }
+
+/* ── Guest / identity ───────────────────────────────────────────────────── */
+.header-signin-link {
+  font-family: 'Georgia', serif;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  border: 0.5px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+.header-signin-link:hover { background: var(--accent-light); }
+
+.identity-modal {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 0.5px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 1.5rem 1.5rem 2rem;
+  z-index: 200;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+.identity-modal-close {
+  position: absolute;
+  top: 1rem; right: 1rem;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.identity-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  padding-right: 2rem;
+}
+.identity-modal-message {
+  font-size: 13px;
+  color: var(--text2);
+  min-height: 0;
+}
+.identity-modal-or {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text3);
+  margin: -.1rem 0;
+}

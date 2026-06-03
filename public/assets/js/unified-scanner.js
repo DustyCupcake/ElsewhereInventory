@@ -12,13 +12,16 @@ import { Scanner, scanFeedbackSuccess, scanFeedbackError } from './scanner.js?v=
 import { renderScanResult } from './scan-result.js?v=1.0.0';
 
 // Persistent session state (survives tab switches)
-let _session  = null;   // { entity, items, mode }
-let _toast    = null;
-let _onTabSwitch  = null;
-let _updateBanner = null;
-let _user     = null;
-let _container = null;
-let _scanner  = null;   // Scanner instance
+let _session          = null;   // { entity, items, mode }
+let _toast            = null;
+let _onTabSwitch      = null;
+let _updateBanner     = null;
+let _requireIdentity  = null;
+let _onIdentityResolved = null;
+let _user             = null;
+let _container        = null;
+let _scanner          = null;   // Scanner instance
+let _identityMode     = false;  // true when scanner is open to scan a badge for auth
 
 export function getSession() { return _session; }
 
@@ -27,12 +30,16 @@ export function destroy() {
   _scanner = null;
 }
 
-export function init(container, user, { extra = null, onTabSwitch, toast, updateBannerFn } = {}) {
-  _container    = container;
-  _user         = user;
-  _toast        = toast;
-  _onTabSwitch  = onTabSwitch;
-  _updateBanner = updateBannerFn;
+export function init(container, user, { extra = null, onTabSwitch, toast, updateBannerFn,
+    requireIdentityFn, onIdentityResolvedFn } = {}) {
+  _container          = container;
+  _user               = user;
+  _toast              = toast;
+  _onTabSwitch        = onTabSwitch;
+  _updateBanner       = updateBannerFn;
+  _requireIdentity    = requireIdentityFn;
+  _onIdentityResolved = onIdentityResolvedFn;
+  _identityMode       = extra?.identityMode ?? false;
 
   // Start a fresh session if none exists
   if (!_session) {
@@ -78,7 +85,7 @@ function renderScanning(container) {
           style="width:100%;height:100%;display:block;object-fit:cover"></video>
         <div id="scan-hint" style="position:absolute;bottom:12px;left:0;right:0;text-align:center;
           color:#fff;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.7);pointer-events:none">
-          ${entity ? `Scanning items for <strong>${esc(entity.name)}</strong>` : 'Scan any QR code'}
+          ${_identityMode ? 'Scan your badge to continue' : (entity ? `Scanning items for <strong>${esc(entity.name)}</strong>` : 'Scan any QR code')}
         </div>
       </div>
 
@@ -306,6 +313,13 @@ function resumeCamera() {
 // ── QR Lookup & Routing ───────────────────────────────────────────────────────
 
 async function handleLookup(qr) {
+  // Detect person badge URL: https://host/person.html?token=TOKEN
+  const badgeMatch = qr.match(/\/person\.html[?#&][^"]*[?&]?token=([a-f0-9]{64})/i);
+  if (badgeMatch) {
+    await handlePersonBadgeScan(badgeMatch[1]);
+    return;
+  }
+
   // Scanner already stopped itself on emit; overlay takes focus
   const overlay = document.getElementById('scan-result-overlay');
   const inner   = document.getElementById('scan-result-inner');
@@ -348,6 +362,197 @@ async function handleLookup(qr) {
   renderScanResult(inner, data, perms, (action, payload) => {
     onScanAction(action, payload, qr, data);
   });
+}
+
+async function handlePersonBadgeScan(token) {
+  const perms = _user?.permissions || [];
+
+  // ── Identity mode: inline badge claim / login ─────────────────────────────
+  if (_identityMode) {
+    const overlay = document.getElementById('scan-result-overlay');
+    const inner   = document.getElementById('scan-result-inner');
+    if (!overlay || !inner) { window.location.href = '/person.html?token=' + encodeURIComponent(token); return; }
+
+    inner.innerHTML = '<div class="empty"><span class="spinner"></span></div>';
+    overlay.style.display = '';
+
+    let info;
+    try {
+      info = await get('/auth/person-token-info?token=' + encodeURIComponent(token));
+    } catch (e) {
+      inner.innerHTML = `<div style="color:var(--text2);padding:1rem">Network error: ${esc(e.message)}</div>`;
+      return;
+    }
+
+    if (!info.valid) {
+      inner.innerHTML = `
+        <div class="scan-card">
+          <div class="scan-card-icon" style="color:var(--danger)">✕</div>
+          <div class="scan-card-body">
+            <div class="scan-card-name">Badge not found</div>
+            <div class="scan-card-sub">This badge may have been deactivated.</div>
+          </div>
+        </div>
+        <div class="scan-actions">
+          <button class="btn scan-action-btn" onclick="window._scanner.closeOverlay()">← Try again</button>
+        </div>`;
+      return;
+    }
+
+    const isUnclaimed = !info.claimed;
+    inner.innerHTML = `
+      <div class="scan-card">
+        <div class="scan-card-icon">🪪</div>
+        <div class="scan-card-body">
+          <div class="scan-card-name">${esc(info.label || 'Personal Badge')}</div>
+          <div class="scan-card-sub">${isUnclaimed
+            ? 'Unclaimed — enter your name to claim this badge'
+            : "Enter your name to confirm it's you"}</div>
+        </div>
+      </div>
+      <div style="padding:0 1rem 1rem">
+        <input type="text" id="badge-name-input" placeholder="Your name"
+          autocomplete="name" style="width:100%;margin-bottom:.5rem">
+        <div id="badge-name-error" style="color:var(--danger);font-size:13px;display:none;margin-bottom:.5rem"></div>
+        <button class="btn primary scan-action-btn" id="badge-name-btn" style="width:100%">
+          ${isUnclaimed ? 'Claim badge' : 'Continue'}
+        </button>
+        <button class="btn scan-action-btn" style="width:100%;margin-top:.25rem"
+          onclick="window._scanner.closeOverlay()">← Back</button>
+      </div>`;
+
+    setTimeout(() => document.getElementById('badge-name-input')?.focus(), 100);
+
+    const submit = async () => {
+      const nameEl = document.getElementById('badge-name-input');
+      const errEl  = document.getElementById('badge-name-error');
+      const btn    = document.getElementById('badge-name-btn');
+      const name   = nameEl?.value.trim();
+      if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = ''; return; }
+
+      btn.disabled = true;
+      btn.textContent = isUnclaimed ? 'Claiming…' : 'Signing in…';
+      errEl.style.display = 'none';
+
+      try {
+        const endpoint = isUnclaimed ? '/api/auth/person-claim' : '/api/auth/person-login';
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token, display_name: name }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          errEl.textContent = resp.status === 401
+            ? 'Name does not match. Try the name you used when claiming this badge.'
+            : (data.error || 'Something went wrong.');
+          errEl.style.display = '';
+          btn.disabled = false;
+          btn.textContent = isUnclaimed ? 'Claim badge' : 'Continue';
+          return;
+        }
+
+        if (_onIdentityResolved) _onIdentityResolved(data);
+        overlay.style.display = 'none';
+      } catch {
+        errEl.textContent = 'Network error. Check your connection.';
+        errEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = isUnclaimed ? 'Claim badge' : 'Continue';
+      }
+    };
+
+    document.getElementById('badge-name-btn')?.addEventListener('click', submit);
+    document.getElementById('badge-name-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+    return;
+  }
+
+  // ── Staff checkout flow: set person as checkout entity ────────────────────
+  if (perms.includes('checkout_equipment') || perms.includes('sub_checkout') || perms.includes('person_checkout')) {
+    const overlay = document.getElementById('scan-result-overlay');
+    const inner   = document.getElementById('scan-result-inner');
+    if (!overlay || !inner) return;
+
+    inner.innerHTML = '<div class="empty"><span class="spinner"></span></div>';
+    overlay.style.display = '';
+
+    try {
+      const info = await get('/auth/person-token-info?token=' + encodeURIComponent(token));
+
+      if (!info.valid) {
+        inner.innerHTML = `
+          <div class="scan-card">
+            <div class="scan-card-icon" style="color:var(--danger)">✕</div>
+            <div class="scan-card-body"><div class="scan-card-name">Badge not found</div></div>
+          </div>
+          <div class="scan-actions">
+            <button class="btn scan-action-btn" onclick="window._scanner.closeOverlay()">Close</button>
+          </div>`;
+        return;
+      }
+
+      if (!info.claimed) {
+        inner.innerHTML = `
+          <div class="scan-card">
+            <div class="scan-card-icon">🪪</div>
+            <div class="scan-card-body">
+              <div class="scan-card-name">${esc(info.label || 'Personal Badge')}</div>
+              <div class="scan-card-sub">This badge hasn't been claimed yet.</div>
+            </div>
+          </div>
+          <div class="scan-actions">
+            <button class="btn scan-action-btn" onclick="window._scanner.closeOverlay()">Close</button>
+          </div>`;
+        return;
+      }
+
+      const personData = await get('/person-info?qr=' + encodeURIComponent(token));
+      const p = personData?.person;
+      if (!p) {
+        inner.innerHTML = `<div style="color:var(--text2);padding:1rem">Person record not found.</div>`;
+        return;
+      }
+
+      const entity = { type: 'person', id: p.id, name: p.display_name, qr: token };
+
+      if (_session.entity && _session.entity.id !== entity.id) {
+        inner.innerHTML = `
+          <div class="scan-card">
+            <div class="scan-card-icon">⚠️</div>
+            <div class="scan-card-body">
+              <div class="scan-card-name">Switch recipient?</div>
+              <div class="scan-card-sub">Currently lending to <strong>${esc(_session.entity.name)}</strong>.
+                Switch to <strong>${esc(entity.name)}</strong>? Your scanned items will be kept.</div>
+            </div>
+          </div>
+          <div class="scan-actions">
+            <button class="btn primary scan-action-btn" id="badge-switch-btn">Switch to ${esc(entity.name)}</button>
+            <button class="btn scan-action-btn" onclick="window._scanner.closeOverlay()">Keep ${esc(_session.entity.name)}</button>
+          </div>`;
+        document.getElementById('badge-switch-btn')?.addEventListener('click', () => {
+          _session.entity = entity;
+          _updateBanner?.();
+          overlay.style.display = 'none';
+          renderMode(_container);
+        });
+        return;
+      }
+
+      _session.entity = entity;
+      _updateBanner?.();
+      overlay.style.display = 'none';
+      renderMode(_container);
+
+    } catch (e) {
+      inner.innerHTML = `<div style="color:var(--text2);padding:1rem">Error: ${esc(e.message)}</div>`;
+    }
+    return;
+  }
+
+  // ── Guest / person session: go to person.html ─────────────────────────────
+  window.location.href = '/person.html?token=' + encodeURIComponent(token);
 }
 
 async function onScanAction(action, payload, rawQr, lookupData) {
@@ -449,6 +654,18 @@ async function onScanAction(action, payload, rawQr, lookupData) {
       resumeCamera();
       break;
     }
+
+    case 'login': {
+      overlay.style.display = 'none';
+      resumeCamera();
+      if (_requireIdentity) {
+        // After identity resolved, reinit scanner (with updated user) and re-scan
+        _requireIdentity(() => _onTabSwitch?.('scanner', { preload: { qr: rawQr } }));
+      } else {
+        window.location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+      }
+      break;
+    }
   }
 }
 
@@ -502,6 +719,48 @@ async function submitCheckout() {
 
     const result = await post(endpoint, body);
     if (result.error) throw new Error(result.error);
+
+    // Per-item results (person-checkout endpoints)
+    if (result.results) {
+      const restricted = result.results.filter(r => !r.success && r.error === 'borrow_restricted');
+      const otherFails = result.results.filter(r => !r.success && r.error !== 'borrow_restricted');
+      if (otherFails.length) throw new Error(otherFails.map(r => r.error || 'error').join('; '));
+      if (restricted.length) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm lend'; }
+        const canManage = perms.includes('manage_equipment');
+        let msgEl = document.getElementById('borrow-restrict-msg');
+        if (!msgEl) {
+          msgEl = document.createElement('div');
+          msgEl.id = 'borrow-restrict-msg';
+          msgEl.style.cssText = 'margin-top:.75rem;padding:.75rem;background:#fff8e1;border:1px solid #e5c000;border-radius:var(--radius);font-size:13px;line-height:1.5';
+          btn?.parentNode?.insertBefore(msgEl, btn.nextSibling);
+        }
+        const itemNames = restricted.map(r => esc(items.find(i => i.qr === r.qr)?.name || r.qr)).join(', ');
+        msgEl.innerHTML = `
+          <strong>⚠ Not permitted to borrow</strong><br>
+          ${esc(entity.name)} can't borrow: ${itemNames}
+          ${canManage ? `<div style="margin-top:.5rem">
+            <button class="btn sm" id="add-borrow-exception-btn">Add exception &amp; retry</button>
+          </div>` : ''}`;
+        if (canManage) {
+          document.getElementById('add-borrow-exception-btn')?.addEventListener('click', async () => {
+            const exBtn = document.getElementById('add-borrow-exception-btn');
+            if (exBtn) { exBtn.disabled = true; exBtn.textContent = 'Adding…'; }
+            try {
+              const typeIds = [...new Set(restricted.map(r => r.type_id))];
+              await Promise.all(typeIds.map(tid =>
+                post('/admin/borrow-rules', { type_id: tid, allowed_user_id: entity.id })
+              ));
+              msgEl.remove();
+              await submitCheckout();
+            } catch {
+              if (exBtn) { exBtn.disabled = false; exBtn.textContent = 'Failed — try again'; }
+            }
+          });
+        }
+        return;
+      }
+    }
 
     _toast('Lent successfully');
     _session = null;

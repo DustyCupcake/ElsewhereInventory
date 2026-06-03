@@ -28,6 +28,9 @@ const ROLE_PERMISSIONS = [
     'dept_staff' => [
         'view_dept_inventory','submit_orders',
     ],
+    'person' => [
+        'checkin_equipment','person_borrow',
+    ],
     // Legacy aliases — mapped before permission resolution
     'admin'     => [],
     'staff'     => [],
@@ -80,6 +83,7 @@ function _build_auth_return(): array {
         'permissions'        => $_SESSION['permissions'] ?? [],
         'language'           => $_SESSION['language'] ?? 'en',
         'is_shift'           => $_SESSION['is_shift'] ?? false,
+        'is_person'          => $_SESSION['is_person'] ?? false,
         'shift_id'           => $_SESSION['shift_id'] ?? null,
         'shift_name'         => $_SESSION['shift_name'] ?? null,
         'qr_token'           => $_SESSION['qr_token'] ?? null,
@@ -197,7 +201,8 @@ function check_borrow_eligible(int $item_id, int $type_id): array {
     $is_shift  = $_SESSION['is_shift'] ?? false;
 
     // Shift sessions cannot borrow personal equipment
-    if ($is_shift || !$user_id) {
+    $is_person = $_SESSION['is_person'] ?? false;
+    if ($is_shift || (!$user_id && !$is_person)) {
         return ['eligible' => false, 'reason' => 'shift_session'];
     }
 
@@ -223,8 +228,9 @@ function check_borrow_eligible(int $item_id, int $type_id): array {
         return _matches_rules($type_rules, (int)$user_id, $dept_ids);
     }
 
-    // No rules: anyone with person_checkout permission can borrow
-    $can_checkout = has_permission('checkout_equipment') || has_permission('sub_checkout');
+    // No rules: anyone with checkout or person_borrow permission can borrow
+    $can_checkout = has_permission('checkout_equipment') || has_permission('sub_checkout')
+                 || has_permission('person_borrow');
     return $can_checkout
         ? ['eligible' => true,  'reason' => null]
         : ['eligible' => false, 'reason' => 'no_permission'];

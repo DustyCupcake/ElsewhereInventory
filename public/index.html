@@ -40,6 +40,7 @@
       <div class="user-info">
         <button class="user-name-btn" id="header-user-btn" aria-label="Account"></button>
         <button class="hamburger-btn" id="hamburger-btn" aria-label="Menu">&#9776;</button>
+        <a class="header-signin-link" id="header-signin-link" href="/login.html" style="display:none">Sign in</a>
       </div>
     </div>
   </div>
@@ -142,6 +143,19 @@
     <span class="side-menu-item-icon">→</span><span data-i18n="nav.logout">Log out</span>
   </button>
 </nav>
+
+<!-- Identity prompt modal (shown when guest tries an action requiring auth) -->
+<div id="identity-modal-backdrop" class="modal-overlay" style="display:none"></div>
+<div id="identity-modal" class="identity-modal" style="display:none" role="dialog" aria-modal="true" aria-label="Identify yourself">
+  <button class="identity-modal-close" id="identity-modal-close" aria-label="Close">✕</button>
+  <div class="identity-modal-title">Identify yourself to continue</div>
+  <div class="identity-modal-message" id="identity-modal-message"></div>
+  <button class="btn primary" id="identity-badge-btn">
+    <span style="margin-right:.4em">📷</span> Scan my badge
+  </button>
+  <div class="identity-modal-or">or</div>
+  <button class="btn secondary" id="identity-signin-btn">Sign in with account</button>
+</div>
 
 <script src="/assets/vendor/jsqr.min.js?v=1.0.0"></script>
 <script type="module" src="/assets/js/app.js?v=1.0.6"></script>

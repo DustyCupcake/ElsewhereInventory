@@ -12,6 +12,7 @@ import { initTeams }             from './teams.js?v=1.1.0';
 import { initConsumables }       from './consumables.js?v=1.0.0';
 import { initOrders }            from './orders.js?v=1.0.0';
 import { initStorageLocations }  from './storage_locations.js?v=1.0.0';
+import { initPersonTokens }      from './person_tokens.js?v=1.0.0';
 
 let toastTimer = null;
 let _user      = null;
@@ -27,6 +28,7 @@ const SECTION_PERMS = {
   consumables:        ['manage_consumables'],
   orders:             ['manage_orders'],
   'storage-locations': ['manage_equipment'],
+  'person-badges':     ['manage_users'],
 };
 
 export function toast(msg, duration = 3500) {
@@ -118,6 +120,7 @@ function navigate(section) {
     case 'consumables':        initConsumables(content, toast);         break;
     case 'orders':             initOrders(content, toast);              break;
     case 'storage-locations':  initStorageLocations(content, toast);    break;
+    case 'person-badges':      initPersonTokens(content, toast);        break;
     default:            navigate(
       Object.keys(SECTION_PERMS).find(s => SECTION_PERMS[s].some(p => _perms.includes(p))) ?? 'barrios'
     );

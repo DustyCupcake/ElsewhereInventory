@@ -12,10 +12,11 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ─── Users ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
     id            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
-    username      VARCHAR(64)     NOT NULL,
+    username      VARCHAR(64)     NULL,
     display_name  VARCHAR(128)    NOT NULL,
-    password_hash VARCHAR(255)    NOT NULL,
-    role          ENUM('production_admin','production_staff','dept_admin','dept_staff','admin','staff','validator')
+    password_hash VARCHAR(255)    NULL,
+    role          ENUM('production_admin','production_staff','dept_admin','dept_staff',
+                       'person','admin','staff','validator')
                                   NOT NULL DEFAULT 'dept_staff',
     language      VARCHAR(5)      NOT NULL DEFAULT 'en',
     qr_token      VARCHAR(64)     NULL,
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_login    DATETIME,
     is_active     TINYINT(1)      NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_username    (username),
+    UNIQUE KEY uq_username      (username),
     UNIQUE KEY uq_user_qr_token (qr_token)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -333,6 +334,23 @@ CREATE TABLE IF NOT EXISTS equipment_borrow_rules (
     CONSTRAINT fk_brule_item FOREIGN KEY (item_id)           REFERENCES equipment_items(id) ON DELETE CASCADE,
     CONSTRAINT fk_brule_dept FOREIGN KEY (allowed_dept_id)   REFERENCES departments(id)     ON DELETE CASCADE,
     CONSTRAINT fk_brule_user FOREIGN KEY (allowed_user_id)   REFERENCES users(id)           ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ─── Person badge QR pool ────────────────────────────────────────────────────
+-- Pre-generated tokens assigned to people at the event; claimed by entering a name.
+-- If any rules exist for a type/item, only matching users/depts can borrow.
+CREATE TABLE IF NOT EXISTS person_tokens (
+    id           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    token        VARCHAR(64)   NOT NULL,
+    label        VARCHAR(64)   NULL,
+    user_id      INT UNSIGNED  NULL,
+    display_name VARCHAR(128)  NULL,
+    claimed_at   DATETIME      NULL,
+    created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_token (token),
+    KEY idx_user (user_id),
+    CONSTRAINT fk_person_token_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

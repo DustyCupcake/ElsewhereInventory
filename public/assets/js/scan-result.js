@@ -48,7 +48,7 @@ export function renderScanResult(container, lookupData, perms, onAction) {
           }
         }
         if (status === 'available') {
-          if (borrowable && borrow_eligible && has('person_checkout')) {
+          if (borrowable && borrow_eligible && (has('person_borrow') || has('person_checkout'))) {
             actionsHtml += actionBtn('Borrow (check out to me)', 'borrow_self', lookupData, 'primary');
           }
           if (has('checkout_equipment') || has('sub_checkout')) {

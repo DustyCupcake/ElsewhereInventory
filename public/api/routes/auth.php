@@ -20,7 +20,13 @@ function handle_login(): void {
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
-    if (!$user || !$user['is_active'] || !password_verify($password, $user['password_hash'])) {
+    if (!$user || !$user['is_active']) {
+        json_error('Invalid credentials', 401);
+    }
+    if ($user['role'] === 'person' || $user['password_hash'] === null) {
+        json_error('Use your badge QR code to sign in', 401);
+    }
+    if (!password_verify($password, $user['password_hash'])) {
         json_error('Invalid credentials', 401);
     }
 
@@ -355,6 +361,164 @@ function handle_change_password(): void {
         ->execute([$hash, $user['id']]);
 
     json_ok(['success' => true]);
+}
+
+// ─── Person badge session endpoints ───────────────────────────────────────────
+
+function handle_person_token_info(): void {
+    require_method('GET');
+    $token = trim($_GET['token'] ?? '');
+    if ($token === '') json_error('token required', 400);
+
+    $stmt = db()->prepare(
+        'SELECT id, label, display_name, claimed_at FROM person_tokens WHERE token = ?'
+    );
+    $stmt->execute([$token]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        json_ok(['valid' => false]);
+        return;
+    }
+
+    json_ok([
+        'valid'        => true,
+        'claimed'      => $row['claimed_at'] !== null,
+        'display_name' => $row['display_name'],
+        'label'        => $row['label'],
+    ]);
+}
+
+function handle_person_claim(): void {
+    require_method('POST');
+    start_session();
+
+    $b            = body();
+    $token        = trim($b['token'] ?? '');
+    $display_name = trim($b['display_name'] ?? '');
+
+    if ($token === '' || $display_name === '') {
+        json_error('token and display_name required', 400);
+    }
+    if (strlen($display_name) < 2) {
+        json_error('Name must be at least 2 characters', 400);
+    }
+
+    $stmt = db()->prepare(
+        'SELECT id, user_id, claimed_at FROM person_tokens WHERE token = ?'
+    );
+    $stmt->execute([$token]);
+    $tok = $stmt->fetch();
+
+    if (!$tok) json_error('Badge not found', 404);
+    if ($tok['claimed_at'] !== null) json_error('Badge already claimed — use sign-in instead', 409);
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // Create minimal user record — no username, no password
+        $pdo->prepare(
+            'INSERT INTO users (username, display_name, password_hash, role, is_active)
+             VALUES (NULL, ?, NULL, "person", 1)'
+        )->execute([$display_name]);
+        $user_id = (int)$pdo->lastInsertId();
+
+        // Set qr_token on user so existing /person-info?qr= lookup works
+        $pdo->prepare('UPDATE users SET qr_token = ? WHERE id = ?')->execute([$token, $user_id]);
+
+        // Claim the token
+        $pdo->prepare(
+            'UPDATE person_tokens SET user_id = ?, display_name = ?, claimed_at = NOW() WHERE id = ?'
+        )->execute([$user_id, $display_name, $tok['id']]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        json_error('Failed to claim badge: ' . $e->getMessage(), 500);
+    }
+
+    $csrf = bin2hex(random_bytes(32));
+    session_regenerate_id(true);
+    $_SESSION = [
+        'user_id'           => $user_id,
+        'username'          => null,
+        'display_name'      => $display_name,
+        'role'              => 'person',
+        'dept_ids'          => [],
+        'dept_roles'        => [],
+        'dept_sub_entities' => (object)[],
+        'permissions'       => ['checkin_equipment', 'person_borrow'],
+        'language'          => 'en',
+        'is_shift'          => false,
+        'is_person'         => true,
+        'qr_token'          => $token,
+        'csrf_token'        => $csrf,
+    ];
+
+    json_ok([
+        'display_name' => $display_name,
+        'permissions'  => ['checkin_equipment', 'person_borrow'],
+        'is_person'    => true,
+        'qr_token'     => $token,
+        'csrf_token'   => $csrf,
+    ], 201);
+}
+
+function handle_person_login(): void {
+    require_method('POST');
+    start_session();
+
+    $b            = body();
+    $token        = trim($b['token'] ?? '');
+    $display_name = trim($b['display_name'] ?? '');
+
+    if ($token === '' || $display_name === '') {
+        json_error('token and display_name required', 400);
+    }
+
+    $stmt = db()->prepare(
+        'SELECT pt.id, pt.user_id, pt.display_name, pt.claimed_at, u.is_active
+         FROM person_tokens pt
+         LEFT JOIN users u ON u.id = pt.user_id
+         WHERE pt.token = ?'
+    );
+    $stmt->execute([$token]);
+    $tok = $stmt->fetch();
+
+    if (!$tok) json_error('Badge not found', 404);
+    if ($tok['claimed_at'] === null) json_error('Badge not yet claimed — claim it first', 409);
+    if (!$tok['is_active']) json_error('This badge has been deactivated', 403);
+
+    // Case-insensitive name match
+    if (strtolower(trim($tok['display_name'])) !== strtolower($display_name)) {
+        json_error('Name does not match', 401);
+    }
+
+    $csrf = bin2hex(random_bytes(32));
+    session_regenerate_id(true);
+    $_SESSION = [
+        'user_id'           => (int)$tok['user_id'],
+        'username'          => null,
+        'display_name'      => $tok['display_name'],
+        'role'              => 'person',
+        'dept_ids'          => [],
+        'dept_roles'        => [],
+        'dept_sub_entities' => (object)[],
+        'permissions'       => ['checkin_equipment', 'person_borrow'],
+        'language'          => 'en',
+        'is_shift'          => false,
+        'is_person'         => true,
+        'qr_token'          => $token,
+        'csrf_token'        => $csrf,
+    ];
+
+    json_ok([
+        'display_name' => $tok['display_name'],
+        'permissions'  => ['checkin_equipment', 'person_borrow'],
+        'is_person'    => true,
+        'qr_token'     => $token,
+        'csrf_token'   => $csrf,
+    ]);
 }
 
 function handle_language(): void {
