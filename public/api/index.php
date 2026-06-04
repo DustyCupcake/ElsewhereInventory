@@ -78,6 +78,7 @@ $routes = [
     ['GET',    '/fill-route',              'routes/fill_requests.php', 'handle_fill_route'],
     ['POST',   '/fill/confirm',            'routes/fill_requests.php', 'handle_confirm_fill'],
     ['POST',   '/fill/confirm-adhoc',      'routes/fill_requests.php', 'handle_confirm_adhoc_fill'],
+    ['POST',   '/fill/sanitize',           'routes/fill_requests.php', 'handle_sanitize'],
     ['GET',    '/barrios/:id/cubes',       'routes/fill_requests.php', 'handle_barrio_cubes'],
 
     // Persons & account

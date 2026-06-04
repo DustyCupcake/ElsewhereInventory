@@ -228,6 +228,58 @@
   }
 
   .fr-body-padded { padding-bottom: 148px; }
+  .fr-body-padded.has-sanitize-banner { padding-bottom: 196px; }
+
+  /* Sanitize pending banner — amber row above next-stop banner */
+  .fr-sanitize-banner {
+    position: fixed; bottom: 116px; left: 0; right: 0; z-index: 50;
+    background: #92400e; color: #fef3c7;
+    display: flex; align-items: center; gap: 0;
+    border-top: 1px solid rgba(255,255,255,.12);
+    border-bottom: 1px solid rgba(0,0,0,.15);
+    overflow: hidden;
+  }
+  .fr-sanitize-quick {
+    flex-shrink: 0; padding: .55rem 1rem;
+    background: rgba(255,255,255,.15);
+    border: none; border-right: 1px solid rgba(255,255,255,.15);
+    color: #fef3c7; font-family: 'Georgia', serif; font-size: 12px;
+    font-weight: bold; cursor: pointer; white-space: nowrap;
+    transition: background .15s;
+  }
+  .fr-sanitize-quick:hover { background: rgba(255,255,255,.25); }
+  .fr-sanitize-banner-body {
+    flex: 1; display: flex; align-items: center; gap: .5rem;
+    padding: .55rem .75rem; cursor: pointer; min-width: 0;
+  }
+  .fr-sanitize-banner-body:hover { background: rgba(255,255,255,.07); }
+  .fr-sanitize-banner-count {
+    font-size: 13px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fr-sanitize-banner-arrow { font-size: 16px; opacity: .7; margin-left: auto; flex-shrink: 0; }
+
+  /* Sanitize detail overlay */
+  .fr-sanitize-overlay {
+    position: fixed; inset: 0; z-index: 150;
+    background: var(--bg); display: flex; flex-direction: column;
+  }
+  .fr-sanitize-list { flex: 1; overflow-y: auto; padding: .5rem 1.25rem; }
+  .fr-sanitize-item {
+    display: flex; align-items: center; gap: .85rem;
+    padding: .7rem 0; border-bottom: 0.5px solid var(--border);
+  }
+  .fr-sanitize-item:last-child { border-bottom: none; }
+  .fr-sanitize-item-info { flex: 1; min-width: 0; }
+  .fr-sanitize-item-entity { font-size: 14px; color: var(--text); font-weight: 500; }
+  .fr-sanitize-item-cube   { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .fr-sanitize-item-time   { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .fr-sanitize-item-actions { display: flex; flex-direction: column; gap: .35rem; flex-shrink: 0; }
+  .fr-san-ok   { padding: 5px 12px; font-size: 12px; border-radius: var(--radius); cursor: pointer; border: 0.5px solid var(--accent); background: var(--accent); color: #fff; font-family: 'Georgia', serif; }
+  .fr-san-flag { padding: 5px 12px; font-size: 12px; border-radius: var(--radius); cursor: pointer; border: 0.5px solid var(--warn-border); background: var(--surface); color: var(--warn); font-family: 'Georgia', serif; }
+  .fr-sanitize-bulk {
+    padding: .75rem 1.25rem; border-bottom: 0.5px solid var(--border);
+    display: flex; gap: .5rem; background: var(--surface);
+  }
 
   /* Next stop banner */
   .fr-next-banner {
@@ -325,6 +377,15 @@
   <!-- Filled by fill-route.js -->
 </div>
 
+<!-- Sanitize pending banner — amber row, sits above next-stop banner -->
+<div class="fr-sanitize-banner" id="fr-sanitize-banner" style="display:none">
+  <button class="fr-sanitize-quick" id="fr-sanitize-quick">Sanitize all ✓</button>
+  <div class="fr-sanitize-banner-body" id="fr-sanitize-banner-body">
+    <span class="fr-sanitize-banner-count" id="fr-sanitize-banner-count"></span>
+    <span class="fr-sanitize-banner-arrow">›</span>
+  </div>
+</div>
+
 <!-- Next stop banner — tappable, shows above scan bar when route is active -->
 <div class="fr-next-banner" id="fr-next-banner" style="display:none">
   <div class="fr-next-banner-label">Next stop</div>
@@ -336,6 +397,22 @@
 <div class="fr-scan-bar">
   <button class="btn" id="fr-scan-btn">Scan to confirm fill</button>
   <button class="btn secondary" id="fr-adhoc-btn" title="Sticker-only fill (no digital request)">No request</button>
+</div>
+
+<!-- Sanitize detail overlay — individual confirm/flag per cube -->
+<div class="fr-sanitize-overlay" id="fr-sanitize-overlay" style="display:none">
+  <div class="fr-progress-header">
+    <div>
+      <div class="fr-progress-title">Confirm sanitation</div>
+      <div class="fr-progress-sub" id="fr-sanitize-sub"></div>
+    </div>
+    <button class="fr-progress-close" id="fr-sanitize-close">✕</button>
+  </div>
+  <div class="fr-sanitize-bulk">
+    <button class="btn sm" id="fr-sanitize-all-btn">Confirm all sanitized</button>
+    <button class="btn secondary sm" id="fr-flag-all-btn">Flag all</button>
+  </div>
+  <div class="fr-sanitize-list" id="fr-sanitize-list"></div>
 </div>
 
 <!-- Route progress overlay — shown when banner is tapped -->

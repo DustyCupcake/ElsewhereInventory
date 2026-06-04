@@ -123,7 +123,8 @@ function renderResult(qr, data) {
   }
 
   const {
-    cube_label, entity_name, last_filled_at,
+    cube_label, entity_name, fill_state,
+    last_filled_at, last_sanitized_at,
     fill_requested, fills_remaining, credits_remaining,
   } = data;
 
@@ -134,11 +135,16 @@ function renderResult(qr, data) {
     icon  = '💧';
     title = 'Fill requested';
     body  = `${escHtml(entity_name)} has requested a fill. The water truck will fill this cube on the next run.`;
-  } else if (last_filled_at) {
+  } else if (fill_state === 'delivered') {
+    statusClass = 'validated';  // amber
+    icon  = '⏳';
+    title = 'Water delivered — sanitation pending';
+    body  = `Delivered ${formatDate(last_filled_at)}. The truck crew will confirm sanitation shortly.`;
+  } else if (fill_state === 'sanitized') {
     statusClass = 'filled';
     icon  = '✓';
-    title = 'Last fill confirmed';
-    body  = `Filled on ${formatDate(last_filled_at)}`;
+    title = 'Sanitized';
+    body  = `Water filled and sanitized on ${formatDate(last_sanitized_at ?? last_filled_at)}`;
   } else {
     statusClass = 'ready';
     icon  = '🪣';

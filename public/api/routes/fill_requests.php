@@ -305,10 +305,10 @@ function handle_confirm_fill(): void {
              WHERE be.barrio_id = ?"
         )->execute([$entity_id]);
 
-        // Audit transaction
+        // Record delivery (sanitation confirmed separately via POST /fill/sanitize)
         $pdo->prepare(
             'INSERT INTO transactions (type, item_id, barrio_id, performed_by, user_name_cache, occurred_at)
-             VALUES (\'fill_confirmed\', ?, ?, ?, ?, ?)'
+             VALUES (\'fill_delivered\', ?, ?, ?, ?, ?)'
         )->execute([$cube_id, $entity_id, $user['id'], $user['display_name'], $now]);
 
         $pdo->commit();
@@ -318,12 +318,59 @@ function handle_confirm_fill(): void {
     }
 
     json_ok([
-        'success'        => true,
-        'cube_label'     => $cube['cube_label'],
-        'entity_name'    => $cube['barrio_name'],
+        'success'         => true,
+        'cube_id'         => $cube_id,
+        'cube_qr'         => $cube_qr,
+        'cube_label'      => $cube['cube_label'],
+        'entity_id'       => $entity_id,
+        'entity_name'     => $cube['barrio_name'],
         'fills_remaining' => max(0, (int)$fr['fills_requested'] - $new_completed),
-        'request_status' => $new_status,
+        'request_status'  => $new_status,
     ]);
+}
+
+// ─── POST /fill/sanitize ─────────────────────────────────────────────────────
+// Batch-confirm (or flag) sanitation for a set of previously delivered cubes.
+// Accepts cube_item_ids[] from the pending-sanitization list on the truck device.
+function handle_sanitize(): void {
+    require_method('POST');
+    $user = require_auth();
+    require_permission('fill_truck');
+    verify_csrf();
+
+    $b             = body();
+    $cube_item_ids = $b['cube_item_ids'] ?? [];
+    $flagged       = !empty($b['flagged']);
+    $notes         = trim($b['notes'] ?? '');
+
+    if (empty($cube_item_ids) || !is_array($cube_item_ids)) {
+        json_error('cube_item_ids required');
+    }
+
+    $type = $flagged ? 'fill_flagged' : 'fill_confirmed';
+    $now  = date('Y-m-d H:i:s');
+    $pdo  = db();
+    $pdo->beginTransaction();
+    try {
+        foreach ($cube_item_ids as $raw_id) {
+            $item_id = (int)$raw_id;
+            $stmt    = $pdo->prepare('SELECT current_barrio_id FROM equipment_items WHERE id = ?');
+            $stmt->execute([$item_id]);
+            $row       = $stmt->fetch();
+            $barrio_id = $row ? (int)$row['current_barrio_id'] : null;
+
+            $pdo->prepare(
+                'INSERT INTO transactions (type, item_id, barrio_id, performed_by, user_name_cache, occurred_at, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$type, $item_id, $barrio_id, $user['id'], $user['display_name'], $now, $notes ?: null]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        json_error('Database error: ' . $e->getMessage(), 500);
+    }
+
+    json_ok(['success' => true, 'type' => $type, 'confirmed' => count($cube_item_ids)]);
 }
 
 // ─── POST /fill/confirm-adhoc ─────────────────────────────────────────────────
@@ -419,14 +466,31 @@ function handle_cube_status(): void {
     $cube_id   = (int)$cube['id'];
     $entity_id = $cube['entity_id'] ? (int)$cube['entity_id'] : null;
 
-    // Last fill time
+    // Most recent fill-related transaction (determines current state)
     $stmt = $pdo->prepare(
-        "SELECT MAX(occurred_at) AS last_filled_at
+        "SELECT type, occurred_at
          FROM transactions
-         WHERE item_id = ? AND type IN ('fill_confirmed','fill_adhoc')"
+         WHERE item_id = ? AND type IN ('fill_confirmed','fill_adhoc','fill_delivered')
+         ORDER BY occurred_at DESC
+         LIMIT 1"
     );
     $stmt->execute([$cube_id]);
-    $last_fill = $stmt->fetchColumn();
+    $last_fill_row = $stmt->fetch();
+
+    $fill_state      = null;  // null | 'delivered' | 'sanitized'
+    $last_filled_at  = null;
+    $last_sanitized_at = null;
+
+    if ($last_fill_row) {
+        if (in_array($last_fill_row['type'], ['fill_confirmed', 'fill_adhoc'])) {
+            $fill_state        = 'sanitized';
+            $last_sanitized_at = $last_fill_row['occurred_at'];
+            $last_filled_at    = $last_fill_row['occurred_at'];
+        } else {
+            $fill_state     = 'delivered';
+            $last_filled_at = $last_fill_row['occurred_at'];
+        }
+    }
 
     // Active fill request?
     $fill_requested = false;
@@ -459,7 +523,9 @@ function handle_cube_status(): void {
         'cube_label'        => $cube['cube_label'],
         'entity_name'       => $cube['entity_name'],
         'route_position'    => $cube['route_position'] ? (int)$cube['route_position'] : null,
-        'last_filled_at'    => $last_fill ?: null,
+        'fill_state'        => $fill_state,           // null | 'delivered' | 'sanitized'
+        'last_filled_at'    => $last_filled_at,        // most recent delivery or sanitation
+        'last_sanitized_at' => $last_sanitized_at,     // only set when sanitized
         'fill_requested'    => $fill_requested,
         'fills_remaining'   => $fills_remaining,
         'credits_remaining' => $credits_remaining,

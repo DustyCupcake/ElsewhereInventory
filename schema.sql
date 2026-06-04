@@ -292,7 +292,7 @@ CREATE TABLE IF NOT EXISTS dept_equipment_orders (
 -- ─── Transactions ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS transactions (
     id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    type             ENUM('checkout','checkin','sub_checkout','sub_checkin','person_checkout','person_checkin','used','activated','fill_confirmed','fill_flagged','fill_requested','fill_adhoc','fill_cancelled') NOT NULL,
+    type             ENUM('checkout','checkin','sub_checkout','sub_checkin','person_checkout','person_checkin','used','activated','fill_confirmed','fill_flagged','fill_requested','fill_adhoc','fill_cancelled','fill_delivered') NOT NULL,
     item_id          INT UNSIGNED  NOT NULL,
     barrio_id        INT UNSIGNED  NULL,
     dept_id          INT UNSIGNED  NULL,

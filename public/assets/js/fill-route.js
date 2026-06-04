@@ -2,37 +2,47 @@
  * Truck crew fill route page.
  * Requires fill_truck permission (shift QR session or production_admin).
  *
- * Flow:
- *   1. Auth check — redirect to login if missing fill_truck permission
- *   2. Direction picker — claim CW or CCW from the server; locks out the other truck
- *   3. Route list — ordered stops with tap-to-fill and scan-to-fill
- *   4. Next-stop banner — always visible above scan buttons; tap to see full progress
- *   5. Out-of-order warning — shown when a scanned cube isn't the expected next stop
+ * Two-step sanitation flow:
+ *   1. POST /fill/confirm  → writes fill_delivered transaction (water in the cube)
+ *   2. POST /fill/sanitize → writes fill_confirmed transaction (chlorinated/sanitized)
+ *
+ * pendingSanitizations tracks cubes delivered but not yet sanitized this session.
+ * Persisted to localStorage so a page refresh doesn't lose the list.
  */
 
 import { Scanner } from './scanner.js?v=1.0.0';
 
-const CLAIM_KEY = 'fill_claim_id';
+const CLAIM_KEY    = 'fill_claim_id';
+const SANITIZE_KEY = 'fill_pending_sanitizations';
 
-let csrfToken    = null;
-let direction    = null;
-let claimId      = null;
-let scanner      = null;
+let csrfToken = null;
+let direction  = null;
+let claimId    = null;
+let scanner    = null;
 
-// ── Stop state ──────────────────────────────────────────────────────────────
-// stops        — current server-side pending stops (shrinks as fills confirmed)
-// allStops     — full union for progress display (never shrinks)
-// stopStatuses — Map<cube_qr, 'pending'|'filled'|'skipped'>
+// ── Stop state ────────────────────────────────────────────────────────────────
 let stops        = [];
 let allStops     = [];
-let stopStatuses = new Map();
+let stopStatuses = new Map(); // cube_qr → 'pending'|'filled'|'skipped'
+
+// ── Pending sanitization state ────────────────────────────────────────────────
+// [{ cube_id, cube_qr, cube_label, entity_id, entity_name, delivered_at }]
+let pendingSanitizations = [];
+
+function loadPendingSanitizations() {
+  try { return JSON.parse(localStorage.getItem(SANITIZE_KEY) || '[]'); } catch { return []; }
+}
+function savePendingSanitizations() {
+  try { localStorage.setItem(SANITIZE_KEY, JSON.stringify(pendingSanitizations)); } catch {}
+}
+
+// ── Stop helpers ──────────────────────────────────────────────────────────────
 
 function initStopStatuses(newStops) {
   newStops.forEach(s => {
     if (!allStops.find(a => a.cube_qr === s.cube_qr)) allStops.push(s);
     if (!stopStatuses.has(s.cube_qr)) stopStatuses.set(s.cube_qr, 'pending');
   });
-  // Stops that were pending but no longer in the server response were filled
   allStops.forEach(s => {
     if (!newStops.find(n => n.cube_qr === s.cube_qr) &&
         stopStatuses.get(s.cube_qr) === 'pending') {
@@ -41,19 +51,13 @@ function initStopStatuses(newStops) {
   });
 }
 
-function getNextStop() {
-  return stops.find(s => stopStatuses.get(s.cube_qr) === 'pending') ?? null;
-}
+function getNextStop()      { return stops.find(s => stopStatuses.get(s.cube_qr) === 'pending') ?? null; }
+function getNextStopIndex() { return stops.findIndex(s => stopStatuses.get(s.cube_qr) === 'pending'); }
+function pendingCount()     { return [...stopStatuses.values()].filter(v => v === 'pending').length; }
+function filledCount()      { return [...stopStatuses.values()].filter(v => v === 'filled').length; }
+function skippedCount()     { return [...stopStatuses.values()].filter(v => v === 'skipped').length; }
 
-function getNextStopIndex() {
-  return stops.findIndex(s => stopStatuses.get(s.cube_qr) === 'pending');
-}
-
-function pendingCount()  { return [...stopStatuses.values()].filter(v => v === 'pending').length; }
-function filledCount()   { return [...stopStatuses.values()].filter(v => v === 'filled').length; }
-function skippedCount()  { return [...stopStatuses.values()].filter(v => v === 'skipped').length; }
-
-// ── Boot ─────────────────────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function boot() {
   try {
@@ -71,20 +75,26 @@ async function boot() {
     return;
   }
 
-  document.getElementById('fr-logout-btn').onclick = doLogout;
-  document.getElementById('fr-scan-btn').onclick   = () => openScanModal('confirm');
-  document.getElementById('fr-adhoc-btn').onclick  = () => openScanModal('adhoc');
-  document.getElementById('fr-next-banner').onclick = showProgressOverlay;
-  document.getElementById('fr-progress-close').onclick = hideProgressOverlay;
-
-  // Restore saved direction claim
   const saved = localStorage.getItem(CLAIM_KEY);
   if (saved) {
     try { const p = JSON.parse(saved); claimId = p.id; direction = p.direction; } catch {}
   }
+  pendingSanitizations = loadPendingSanitizations();
+
+  document.getElementById('fr-logout-btn').onclick           = doLogout;
+  document.getElementById('fr-scan-btn').onclick             = () => openScanModal('confirm');
+  document.getElementById('fr-adhoc-btn').onclick            = () => openScanModal('adhoc');
+  document.getElementById('fr-next-banner').onclick          = showProgressOverlay;
+  document.getElementById('fr-progress-close').onclick       = hideProgressOverlay;
+  document.getElementById('fr-sanitize-quick').onclick       = (e) => { e.stopPropagation(); confirmSanitizeAll(); };
+  document.getElementById('fr-sanitize-banner-body').onclick = showSanitizeOverlay;
+  document.getElementById('fr-sanitize-close').onclick       = hideSanitizeOverlay;
+  document.getElementById('fr-sanitize-all-btn').onclick     = confirmSanitizeAll;
+  document.getElementById('fr-flag-all-btn').onclick         = flagAll;
 
   if (direction) {
     applyDirection(direction);
+    renderSanitizeBanner();
     await loadRoute();
   } else {
     await showDirectionPicker();
@@ -96,8 +106,9 @@ async function boot() {
 async function showDirectionPicker() {
   const overlay = document.getElementById('fr-direction-overlay');
   overlay.style.display = 'flex';
-  document.getElementById('fr-scan-bar').style.display  = 'none';
-  document.getElementById('fr-next-banner').style.display = 'none';
+  document.getElementById('fr-scan-bar').style.display        = 'none';
+  document.getElementById('fr-next-banner').style.display     = 'none';
+  document.getElementById('fr-sanitize-banner').style.display = 'none';
   document.getElementById('fr-body').innerHTML = '';
 
   const claimedByMap = {};
@@ -128,7 +139,6 @@ async function showDirectionPicker() {
       </div>
     </div>
   `;
-
   overlay.querySelectorAll('.fr-dir-card:not(.taken)').forEach(card => {
     card.addEventListener('click', () => claimDirection(card.dataset.dir));
   });
@@ -137,19 +147,16 @@ async function showDirectionPicker() {
 async function claimDirection(dir) {
   const overlay = document.getElementById('fr-direction-overlay');
   overlay.innerHTML = `<div class="fr-pick-title">Starting ${dir === 'asc' ? 'Clockwise →' : '← Counterclockwise'} route…</div>`;
-
   try {
     const res  = await apiFetch('/api/fill/claim-direction', 'POST', { direction: dir });
     const data = await res.json();
     if (!res.ok) { await showDirectionPicker(); return; }
-
-    claimId   = data.claim_id;
-    direction = dir;
+    claimId = data.claim_id; direction = dir;
     localStorage.setItem(CLAIM_KEY, JSON.stringify({ id: claimId, direction }));
-
     overlay.style.display = 'none';
     document.getElementById('fr-scan-bar').style.display = '';
     applyDirection(direction);
+    renderSanitizeBanner();
     await loadRoute();
   } catch {
     overlay.innerHTML = `
@@ -171,7 +178,6 @@ function applyDirection(dir) {
 async function loadRoute() {
   const body = document.getElementById('fr-body');
   if (!stops.length) body.innerHTML = '<div class="fr-empty">Loading route…</div>';
-
   try {
     const res  = await apiFetch(`/api/fill-route?direction=${direction}`);
     const data = await res.json();
@@ -179,6 +185,7 @@ async function loadRoute() {
     initStopStatuses(stops);
     renderRoute();
     renderNextStopBanner();
+    renderSanitizeBanner();
   } catch {
     body.innerHTML = '<div class="fr-empty">Failed to load route — check connection.</div>';
   }
@@ -188,15 +195,10 @@ async function loadRoute() {
 
 function renderRoute() {
   const body = document.getElementById('fr-body');
-
   if (stops.length === 0 && allStops.length === 0) {
-    body.innerHTML = `
-      <div class="fr-empty">
-        No pending fill requests on the ${direction === 'asc' ? 'clockwise →' : '← counterclockwise'} route.
-      </div>`;
+    body.innerHTML = `<div class="fr-empty">No pending fill requests on the ${direction === 'asc' ? 'clockwise →' : '← counterclockwise'} route.</div>`;
     return;
   }
-
   if (stops.length === 0) {
     body.innerHTML = '<div class="fr-empty">All stops on this route are complete.</div>';
     return;
@@ -205,13 +207,10 @@ function renderRoute() {
   body.innerHTML = stops.map((s, i) => {
     const status = stopStatuses.get(s.cube_qr) ?? 'pending';
     const isNext = i === getNextStopIndex();
-    const rowClass = status === 'skipped' ? 'fr-stop skipped-stop' : `fr-stop${isNext ? ' next-stop' : ''}`;
     return `
-      <div class="${rowClass}" data-qr="${escAttr(s.cube_qr)}" data-index="${i}"
+      <div class="fr-stop" data-qr="${escAttr(s.cube_qr)}" data-index="${i}"
            style="${status === 'skipped' ? 'opacity:.4;' : ''}">
-        <div class="fr-stop-pos" style="${isNext ? 'background:var(--accent);color:#fff;' : ''}">
-          ${s.route_position ?? '?'}
-        </div>
+        <div class="fr-stop-pos" style="${isNext ? 'background:var(--accent);color:#fff;' : ''}">${s.route_position ?? '?'}</div>
         <div class="fr-stop-info">
           <div class="fr-stop-entity">${escHtml(s.entity_name)}</div>
           <div class="fr-stop-cube">${escHtml(s.cube_label)}</div>
@@ -223,113 +222,198 @@ function renderRoute() {
           <button class="fr-skip-btn" data-qr="${escAttr(s.cube_qr)}" data-index="${i}"
             ${status === 'skipped' ? 'style="display:none"' : ''}>Skip</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 
   body.querySelectorAll('.fr-fill-btn:not([disabled])').forEach(btn => {
-    btn.onclick = () => confirmFillByQr(btn.dataset.qr, +btn.dataset.index, 'tap');
+    btn.onclick = () => confirmFillByQr(btn.dataset.qr, +btn.dataset.index);
   });
   body.querySelectorAll('.fr-skip-btn').forEach(btn => {
-    btn.onclick = () => skipStop(btn.dataset.qr, +btn.dataset.index);
+    btn.onclick = () => skipStop(btn.dataset.qr);
   });
 }
 
-// ── Next-stop banner ──────────────────────────────────────────────────────────
+// ── Banners ───────────────────────────────────────────────────────────────────
 
 function renderNextStopBanner() {
-  const banner  = document.getElementById('fr-next-banner');
-  const nameEl  = document.getElementById('fr-next-banner-stop');
-  const metaEl  = document.getElementById('fr-next-banner-meta');
-
-  const next = getNextStop();
-  if (!next || stops.length === 0) {
-    banner.style.display = 'none';
-    return;
-  }
-
+  const banner = document.getElementById('fr-next-banner');
+  const next   = getNextStop();
+  if (!next || stops.length === 0) { banner.style.display = 'none'; return; }
   banner.style.display = 'flex';
-  nameEl.textContent = next.entity_name;
-  metaEl.textContent = `Stop #${next.route_position ?? '?'} · ${next.cube_label}`;
+  document.getElementById('fr-next-banner-stop').textContent = next.entity_name;
+  document.getElementById('fr-next-banner-meta').textContent = `Stop #${next.route_position ?? '?'} · ${next.cube_label}`;
 }
 
-// ── Progress overlay ──────────────────────────────────────────────────────────
+function renderSanitizeBanner() {
+  const banner  = document.getElementById('fr-sanitize-banner');
+  const countEl = document.getElementById('fr-sanitize-banner-count');
+  const body    = document.getElementById('fr-body');
+  const n       = pendingSanitizations.length;
 
-function showProgressOverlay() {
-  const overlay = document.getElementById('fr-progress-overlay');
-  const list    = document.getElementById('fr-progress-list');
-  const title   = document.getElementById('fr-progress-title');
-  const sub     = document.getElementById('fr-progress-sub');
+  if (n === 0) {
+    banner.style.display = 'none';
+    body?.classList.remove('has-sanitize-banner');
+    return;
+  }
+  banner.style.display = 'flex';
+  body?.classList.add('has-sanitize-banner');
 
-  const filled  = filledCount();
-  const pending = pendingCount();
-  const skipped = skippedCount();
-  const total   = allStops.length;
+  const entityNames = [...new Set(pendingSanitizations.map(p => p.entity_name))];
+  const label = entityNames.length <= 2
+    ? entityNames.join(' & ')
+    : `${entityNames[0]} +${entityNames.length - 1} more`;
+  countEl.textContent = `${n} fill${n !== 1 ? 's' : ''} pending sanitation — ${label}`;
+}
 
-  title.textContent = `Route progress — ${direction === 'asc' ? 'Clockwise →' : '← Counterclockwise'}`;
-  sub.textContent   = `${filled} filled · ${pending} remaining · ${skipped ? `${skipped} skipped` : ''}`;
+// ── Sanitize overlay ──────────────────────────────────────────────────────────
 
-  const nextQr  = getNextStop()?.cube_qr;
+function showSanitizeOverlay() {
+  const overlay = document.getElementById('fr-sanitize-overlay');
+  const list    = document.getElementById('fr-sanitize-list');
+  const sub     = document.getElementById('fr-sanitize-sub');
+  const n       = pendingSanitizations.length;
 
-  // Sort allStops by route_position (ASC or DESC depending on direction)
-  const sorted = [...allStops].sort((a, b) =>
-    direction === 'asc'
-      ? (a.route_position ?? 9999) - (b.route_position ?? 9999)
-      : (b.route_position ?? -1)  - (a.route_position ?? -1)
-  );
+  sub.textContent = `${n} fill${n !== 1 ? 's' : ''} delivered — tap each to confirm or flag`;
 
-  list.innerHTML = sorted.map(s => {
-    const status  = stopStatuses.get(s.cube_qr) ?? 'pending';
-    const isNext  = s.cube_qr === nextQr;
-    const badgeClass = status === 'filled' ? 'filled'
-      : status === 'skipped'              ? 'skipped'
-      : isNext                            ? 'next'
-      :                                     'upcoming';
-    const badgeContent = status === 'filled'  ? '✓'
-      : status === 'skipped'                  ? '↷'
-      : isNext                                ? '→'
-      :                                         String(s.route_position ?? '?');
-
-    const tag = isNext   ? '<span class="fr-progress-stop-tag next">Next</span>'
-      : status === 'skipped' ? '<span class="fr-progress-stop-tag skipped">Skipped</span>'
-      : '';
-
-    return `
-      <div class="fr-progress-stop">
-        <div class="fr-progress-badge ${badgeClass}">${badgeContent}</div>
-        <div class="fr-progress-stop-info">
-          <div class="fr-progress-stop-entity ${status}">${escHtml(s.entity_name)}</div>
-          <div class="fr-progress-stop-cube">${escHtml(s.cube_label)}</div>
-        </div>
-        ${tag}
+  list.innerHTML = pendingSanitizations.map((p, i) => `
+    <div class="fr-sanitize-item" data-index="${i}">
+      <div class="fr-sanitize-item-info">
+        <div class="fr-sanitize-item-entity">${escHtml(p.entity_name)}</div>
+        <div class="fr-sanitize-item-cube">${escHtml(p.cube_label)}</div>
+        <div class="fr-sanitize-item-time">${formatTime(p.delivered_at)}</div>
       </div>
-    `;
-  }).join('') || '<div style="color:var(--text3);text-align:center;padding:2rem 0;font-size:14px">No stops recorded yet</div>';
+      <div class="fr-sanitize-item-actions">
+        <button class="fr-san-ok"   data-index="${i}">Sanitized ✓</button>
+        <button class="fr-san-flag" data-index="${i}">Flag ✗</button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.fr-san-ok').forEach(btn => {
+    btn.onclick = () => sanitizeSingle(+btn.dataset.index, false);
+  });
+  list.querySelectorAll('.fr-san-flag').forEach(btn => {
+    btn.onclick = () => promptFlagSingle(+btn.dataset.index);
+  });
 
   overlay.style.display = 'flex';
 }
 
-function hideProgressOverlay() {
-  document.getElementById('fr-progress-overlay').style.display = 'none';
+function hideSanitizeOverlay() {
+  document.getElementById('fr-sanitize-overlay').style.display = 'none';
+}
+
+// ── Sanitize actions ──────────────────────────────────────────────────────────
+
+async function confirmSanitizeAll() {
+  if (!pendingSanitizations.length) return;
+  const ids = pendingSanitizations.map(p => p.cube_id);
+  try {
+    const res  = await apiFetch('/api/fill/sanitize', 'POST', { cube_item_ids: ids });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      const n = pendingSanitizations.length;
+      pendingSanitizations = []; savePendingSanitizations();
+      renderSanitizeBanner(); hideSanitizeOverlay();
+      showToast(`${n} fill${n !== 1 ? 's' : ''} confirmed sanitized ✓`);
+    } else { showScanError(data.error || 'Sanitize failed'); }
+  } catch { showScanError('Network error'); }
+}
+
+async function sanitizeSingle(index, flagged, notes = '') {
+  const item = pendingSanitizations[index];
+  if (!item) return;
+  try {
+    const res  = await apiFetch('/api/fill/sanitize', 'POST', {
+      cube_item_ids: [item.cube_id], flagged, notes: notes || undefined,
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      pendingSanitizations.splice(index, 1); savePendingSanitizations();
+      renderSanitizeBanner();
+      if (pendingSanitizations.length === 0) hideSanitizeOverlay();
+      else showSanitizeOverlay();
+    } else { showScanError(data.error || 'Sanitize failed'); }
+  } catch { showScanError('Network error'); }
+}
+
+function promptFlagSingle(index) {
+  const item = pendingSanitizations[index];
+  if (!item) return;
+  const row     = document.querySelector(`.fr-sanitize-item[data-index="${index}"]`);
+  if (!row) return;
+  const actions = row.querySelector('.fr-sanitize-item-actions');
+  actions.innerHTML = `
+    <textarea id="flag-note-${index}" placeholder="Reason…"
+      style="width:130px;height:48px;padding:5px;font-size:12px;font-family:Georgia,serif;
+             border:0.5px solid var(--warn-border);border-radius:var(--radius);
+             background:var(--surface);color:var(--text);resize:none"></textarea>
+    <div style="display:flex;gap:.25rem;margin-top:.2rem">
+      <button class="fr-san-flag" id="flag-confirm-${index}">Flag</button>
+      <button class="fr-san-ok" id="flag-cancel-${index}"
+        style="background:var(--surface);color:var(--text2);border-color:var(--border-med)">✕</button>
+    </div>
+  `;
+  document.getElementById(`flag-confirm-${index}`).onclick = () =>
+    sanitizeSingle(index, true, document.getElementById(`flag-note-${index}`)?.value?.trim() ?? '');
+  document.getElementById(`flag-cancel-${index}`).onclick = showSanitizeOverlay;
+}
+
+async function flagAll() {
+  const modal = document.getElementById('fr-scan-modal');
+  const n     = pendingSanitizations.length;
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="fr-scan-modal-inner">
+      <div class="fr-scan-modal-title">Flag all ${n} fill${n !== 1 ? 's' : ''}</div>
+      <textarea id="flag-all-note" placeholder="Reason for flagging all…"
+        style="width:100%;height:60px;padding:8px;font-family:Georgia,serif;font-size:13px;
+               border:0.5px solid var(--warn-border);border-radius:var(--radius);
+               background:var(--surface);color:var(--text);resize:none"></textarea>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem">
+        <button class="btn secondary" id="flag-all-confirm">Flag all</button>
+        <button class="btn secondary" id="flag-all-cancel">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('flag-all-cancel').onclick = () => { modal.style.display = 'none'; modal.innerHTML = ''; };
+  document.getElementById('flag-all-confirm').onclick = async () => {
+    const notes = document.getElementById('flag-all-note')?.value?.trim() ?? '';
+    const ids   = pendingSanitizations.map(p => p.cube_id);
+    modal.style.display = 'none'; modal.innerHTML = '';
+    try {
+      const res  = await apiFetch('/api/fill/sanitize', 'POST', { cube_item_ids: ids, flagged: true, notes });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        pendingSanitizations = []; savePendingSanitizations();
+        renderSanitizeBanner(); hideSanitizeOverlay();
+        showToast(`${n} fill${n !== 1 ? 's' : ''} flagged`);
+      } else { showScanError(data.error || 'Flag failed'); }
+    } catch { showScanError('Network error'); }
+  };
 }
 
 // ── Confirm fill ──────────────────────────────────────────────────────────────
 
-async function confirmFillByQr(cube_qr, indexHint, source = 'scan') {
-  // Find this stop in the current list
-  const idx = indexHint !== null && indexHint !== undefined && stops[indexHint]?.cube_qr === cube_qr
+async function confirmFillByQr(cube_qr, indexHint) {
+  const idx = (indexHint !== null && indexHint !== undefined && stops[indexHint]?.cube_qr === cube_qr)
     ? indexHint
     : stops.findIndex(s => s.cube_qr === cube_qr);
 
-  if (idx === -1) {
-    // Not in pending list — could be a cube with no request
-    showScanError('No pending fill request for this cube.');
-    return;
+  if (idx === -1) { showScanError('No pending fill request for this cube.'); return; }
+
+  // Entity-change check
+  if (pendingSanitizations.length > 0) {
+    const lastEntityId    = pendingSanitizations[pendingSanitizations.length - 1].entity_id;
+    const scannedEntityId = stops[idx]?.entity_id;
+    if (scannedEntityId && scannedEntityId !== lastEntityId) {
+      showEntityChangePrompt(cube_qr, idx, getNextStopIndex());
+      return;
+    }
   }
 
+  // Out-of-order check
   const nextIdx = getNextStopIndex();
-
-  // Out-of-order check — only warn if there's a clearly different expected next stop
   if (nextIdx !== -1 && idx !== nextIdx) {
     showOutOfOrderWarning(cube_qr, idx, nextIdx);
     return;
@@ -342,43 +426,95 @@ async function doConfirmFill(cube_qr, idx) {
   try {
     const res  = await apiFetch('/api/fill/confirm', 'POST', { cube_qr });
     const data = await res.json();
-
     if (res.ok && data.success) {
+      pendingSanitizations.push({
+        cube_id:     data.cube_id,
+        cube_qr:     data.cube_qr,
+        cube_label:  data.cube_label,
+        entity_id:   data.entity_id,
+        entity_name: data.entity_name,
+        delivered_at: new Date().toISOString(),
+      });
+      savePendingSanitizations();
       stopStatuses.set(cube_qr, 'filled');
       markStopDone(idx);
-      showFillSuccess(data.cube_label, data.entity_name, data.fills_remaining);
-    } else {
-      showScanError(data.error || 'Could not confirm fill.');
-    }
-  } catch {
-    showScanError('Network error — try again.');
-  }
+      showFillDelivered(data.cube_label, data.entity_name, data.fills_remaining);
+    } else { showScanError(data.error || 'Could not confirm fill.'); }
+  } catch { showScanError('Network error — try again.'); }
 }
 
 function markStopDone(index) {
   stops.splice(index, 1);
-  // Brief fade before re-render gives visual feedback
   const el = document.querySelector(`.fr-stop[data-index="${index}"]`);
   if (el) {
     el.classList.add('completing');
-    setTimeout(() => { renderRoute(); renderNextStopBanner(); }, 350);
+    setTimeout(() => { renderRoute(); renderNextStopBanner(); renderSanitizeBanner(); }, 350);
   } else {
-    renderRoute();
-    renderNextStopBanner();
+    renderRoute(); renderNextStopBanner(); renderSanitizeBanner();
   }
 }
 
-function skipStop(cube_qr, _index) {
+function skipStop(cube_qr) {
   stopStatuses.set(cube_qr, 'skipped');
-  renderRoute();
-  renderNextStopBanner();
+  renderRoute(); renderNextStopBanner();
+}
+
+// ── Entity-change prompt ──────────────────────────────────────────────────────
+
+function showEntityChangePrompt(cube_qr, idx, nextIdx) {
+  const n          = pendingSanitizations.length;
+  const entityList = pendingSanitizations
+    .map(p => `<li style="margin:.1rem 0">${escHtml(p.cube_label)} — ${escHtml(p.entity_name)}</li>`)
+    .join('');
+
+  const modal = document.getElementById('fr-scan-modal');
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="fr-scan-modal-inner">
+      <div class="fr-scan-modal-title">Before continuing…</div>
+      <div class="fr-adhoc-card" style="margin-bottom:.75rem">
+        <div class="fr-adhoc-card-title">${n} fill${n !== 1 ? 's' : ''} pending sanitation</div>
+        <div class="fr-adhoc-card-body">
+          <ul style="margin:.4rem 0 .5rem 1rem;padding:0">${entityList}</ul>
+          Did you sanitize ${n === 1 ? 'it' : 'them'} before moving on?
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.4rem">
+        <button class="btn"           id="ech-yes">Yes — confirm sanitized, then continue</button>
+        <button class="btn secondary" id="ech-no">Not yet — continue without sanitizing</button>
+        <button class="btn secondary" id="ech-review">Review each fill</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('ech-review').onclick = () => {
+    modal.style.display = 'none'; modal.innerHTML = ''; showSanitizeOverlay();
+  };
+  document.getElementById('ech-no').onclick = async () => {
+    modal.style.display = 'none'; modal.innerHTML = '';
+    await proceedWithFill(cube_qr, idx, nextIdx);
+  };
+  document.getElementById('ech-yes').onclick = async () => {
+    modal.style.display = 'none'; modal.innerHTML = '';
+    const ids = pendingSanitizations.map(p => p.cube_id);
+    try {
+      await apiFetch('/api/fill/sanitize', 'POST', { cube_item_ids: ids });
+      pendingSanitizations = []; savePendingSanitizations(); renderSanitizeBanner();
+    } catch {}
+    await proceedWithFill(cube_qr, idx, nextIdx);
+  };
+}
+
+async function proceedWithFill(cube_qr, idx, nextIdx) {
+  if (nextIdx !== -1 && idx !== nextIdx) showOutOfOrderWarning(cube_qr, idx, nextIdx);
+  else await doConfirmFill(cube_qr, idx);
 }
 
 // ── Out-of-order warning ──────────────────────────────────────────────────────
 
 function showOutOfOrderWarning(cube_qr, scannedIdx, nextIdx) {
-  const scanned = stops[scannedIdx];
-  const next    = stops[nextIdx];
+  const scanned   = stops[scannedIdx];
+  const next      = stops[nextIdx];
   const skipCount = scannedIdx - nextIdx;
 
   const modal = document.getElementById('fr-scan-modal');
@@ -390,42 +526,69 @@ function showOutOfOrderWarning(cube_qr, scannedIdx, nextIdx) {
         <div class="fr-adhoc-card-title">Not the expected next stop</div>
         <div class="fr-adhoc-card-body">
           You scanned <b>stop #${scanned.route_position ?? '?'} — ${escHtml(scanned.entity_name)}</b>.<br>
-          Expected next was <b>stop #${next.route_position ?? '?'} — ${escHtml(next.entity_name)}</b>.
-          ${skipCount > 0
-            ? `<br><br>${skipCount} stop${skipCount !== 1 ? 's' : ''} before this one will be marked as skipped.`
-            : ''}
+          Expected next: <b>stop #${next.route_position ?? '?'} — ${escHtml(next.entity_name)}</b>.
+          ${skipCount > 0 ? `<br><br>${skipCount} stop${skipCount !== 1 ? 's' : ''} before this will be marked as skipped.` : ''}
         </div>
       </div>
       <div style="display:flex;gap:.5rem;margin-top:.75rem">
-        <button class="btn" id="ooo-confirm-btn">Fill anyway</button>
-        <button class="btn secondary" id="ooo-cancel-btn">Cancel</button>
+        <button class="btn" id="ooo-confirm">Fill anyway</button>
+        <button class="btn secondary" id="ooo-cancel">Cancel</button>
       </div>
     </div>
   `;
-
-  document.getElementById('ooo-cancel-btn').onclick = () => {
-    modal.style.display = 'none';
-    modal.innerHTML = '';
-  };
-
-  document.getElementById('ooo-confirm-btn').onclick = async () => {
-    modal.style.display = 'none';
-    modal.innerHTML = '';
-
-    // Mark everything between nextIdx and scannedIdx as skipped (batch, single re-render)
+  document.getElementById('ooo-cancel').onclick = () => { modal.style.display = 'none'; modal.innerHTML = ''; };
+  document.getElementById('ooo-confirm').onclick = async () => {
+    modal.style.display = 'none'; modal.innerHTML = '';
     for (let i = nextIdx; i < scannedIdx; i++) {
       const s = stops[i];
-      if (s && stopStatuses.get(s.cube_qr) === 'pending') {
-        stopStatuses.set(s.cube_qr, 'skipped');
-      }
+      if (s && stopStatuses.get(s.cube_qr) === 'pending') stopStatuses.set(s.cube_qr, 'skipped');
     }
-    renderRoute();
-    renderNextStopBanner();
+    renderRoute(); renderNextStopBanner();
     await doConfirmFill(cube_qr, scannedIdx);
   };
 }
 
-// ── Ad-hoc fill (sticker fallback) ────────────────────────────────────────────
+// ── Progress overlay ──────────────────────────────────────────────────────────
+
+function showProgressOverlay() {
+  const overlay = document.getElementById('fr-progress-overlay');
+  document.getElementById('fr-progress-title').textContent =
+    `Route — ${direction === 'asc' ? 'Clockwise →' : '← Counterclockwise'}`;
+  document.getElementById('fr-progress-sub').textContent =
+    `${filledCount()} filled · ${pendingCount()} remaining${skippedCount() ? ` · ${skippedCount()} skipped` : ''}`;
+
+  const nextQr = getNextStop()?.cube_qr;
+  const sorted = [...allStops].sort((a, b) =>
+    direction === 'asc'
+      ? (a.route_position ?? 9999) - (b.route_position ?? 9999)
+      : (b.route_position ?? -1)   - (a.route_position ?? -1)
+  );
+
+  document.getElementById('fr-progress-list').innerHTML = sorted.map(s => {
+    const status      = stopStatuses.get(s.cube_qr) ?? 'pending';
+    const isNext      = s.cube_qr === nextQr;
+    const badgeClass  = status === 'filled' ? 'filled' : status === 'skipped' ? 'skipped' : isNext ? 'next' : 'upcoming';
+    const badgeContent= status === 'filled' ? '✓' : status === 'skipped' ? '↷' : isNext ? '→' : String(s.route_position ?? '?');
+    const tag = isNext ? '<span class="fr-progress-stop-tag next">Next</span>'
+      : status === 'skipped' ? '<span class="fr-progress-stop-tag skipped">Skipped</span>' : '';
+    return `
+      <div class="fr-progress-stop">
+        <div class="fr-progress-badge ${badgeClass}">${badgeContent}</div>
+        <div class="fr-progress-stop-info">
+          <div class="fr-progress-stop-entity ${status}">${escHtml(s.entity_name)}</div>
+          <div class="fr-progress-stop-cube">${escHtml(s.cube_label)}</div>
+        </div>${tag}
+      </div>`;
+  }).join('') || '<div style="color:var(--text3);text-align:center;padding:2rem;font-size:14px">No stops yet</div>';
+
+  overlay.style.display = 'flex';
+}
+
+function hideProgressOverlay() {
+  document.getElementById('fr-progress-overlay').style.display = 'none';
+}
+
+// ── Ad-hoc fill (sticker fallback, records delivery+sanitation together) ──────
 
 async function confirmAdhocByQr(cube_qr) {
   const modal = document.getElementById('fr-scan-modal');
@@ -435,48 +598,39 @@ async function confirmAdhocByQr(cube_qr) {
       <div class="fr-scan-modal-title">Confirm sticker fill</div>
       <div class="fr-adhoc-card">
         <div class="fr-adhoc-card-title">No digital request</div>
-        <div class="fr-adhoc-card-body">
-          Confirming a fill with no pending digital request — use when a sticker is
-          present but no request was created in the app. A credit will be used if available.
-        </div>
+        <div class="fr-adhoc-card-body">No pending request found. Use when a sticker is present.
+          Records delivery and sanitation together. A credit will be used if available.</div>
       </div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:.75rem">
-        Cube: <b id="adhoc-cube-label">looking up…</b>
-      </div>
-      <textarea id="adhoc-notes" placeholder="Optional notes (sticker colour, reason…)"
+      <div style="font-size:13px;color:var(--text2);margin-bottom:.75rem">Cube: <b id="adhoc-lbl">looking up…</b></div>
+      <textarea id="adhoc-notes" placeholder="Notes (sticker colour, reason…)"
         style="width:100%;height:60px;padding:8px;font-family:Georgia,serif;font-size:13px;
                border:0.5px solid var(--border-med);border-radius:var(--radius);
                background:var(--surface);color:var(--text);resize:none"></textarea>
       <div style="display:flex;gap:.5rem;margin-top:.75rem">
-        <button class="btn" id="adhoc-confirm-btn">Confirm fill</button>
-        <button class="btn secondary" id="adhoc-cancel-btn">Cancel</button>
+        <button class="btn" id="adhoc-confirm">Confirm fill</button>
+        <button class="btn secondary" id="adhoc-cancel">Cancel</button>
       </div>
     </div>
   `;
-
   try {
     const r = await fetch(`/api/water/cube-status?qr=${encodeURIComponent(cube_qr)}`);
     const d = await r.json();
-    const lbl = document.getElementById('adhoc-cube-label');
-    if (lbl) lbl.textContent = d.cube_label ?? cube_qr;
+    const el = document.getElementById('adhoc-lbl');
+    if (el) el.textContent = d.cube_label ?? cube_qr;
   } catch {}
 
-  document.getElementById('adhoc-cancel-btn').onclick = closeScanModal;
-  document.getElementById('adhoc-confirm-btn').onclick = async () => {
+  document.getElementById('adhoc-cancel').onclick = closeScanModal;
+  document.getElementById('adhoc-confirm').onclick = async () => {
     const notes = document.getElementById('adhoc-notes')?.value?.trim() ?? '';
     try {
       const res  = await apiFetch('/api/fill/confirm-adhoc', 'POST', { cube_qr, notes });
       const data = await res.json();
       if (res.ok && data.success) {
         closeScanModal();
-        showFillSuccess(data.cube_label, data.entity_name, null, true);
+        showToast(`Ad-hoc fill logged — ${data.cube_label}`);
         loadRoute();
-      } else {
-        showScanError(data.error || 'Could not confirm fill.');
-      }
-    } catch {
-      showScanError('Network error.');
-    }
+      } else { showScanError(data.error || 'Could not confirm fill.'); }
+    } catch { showScanError('Network error.'); }
   };
 }
 
@@ -490,21 +644,18 @@ function openScanModal(mode) {
       <div class="fr-scan-modal-title">${mode === 'adhoc' ? 'Scan cube (sticker fill)' : 'Scan cube to confirm fill'}</div>
       <div class="fr-scan-video-wrap">
         <video id="fr-scan-video" playsinline muted></video>
-        <div class="fr-scan-overlay">
-          <div class="fr-scan-frame"><div class="fr-scan-line"></div></div>
-        </div>
+        <div class="fr-scan-overlay"><div class="fr-scan-frame"><div class="fr-scan-line"></div></div></div>
       </div>
       <div class="fr-scan-status" id="fr-scan-status">Aim camera at the cube QR code</div>
       <button class="btn secondary" id="fr-scan-close" style="margin-top:.5rem">Cancel</button>
     </div>
   `;
   document.getElementById('fr-scan-close').onclick = closeScanModal;
-
   const video = document.getElementById('fr-scan-video');
   scanner = new Scanner(video, (qr) => {
     closeScanModal(false);
     if (mode === 'adhoc') confirmAdhocByQr(qr);
-    else confirmFillByQr(qr, null, 'scan');
+    else confirmFillByQr(qr, null);
   });
   scanner.start().catch(() => {
     const s = document.getElementById('fr-scan-status');
@@ -515,8 +666,7 @@ function openScanModal(mode) {
 function closeScanModal(clearScanner = true) {
   if (clearScanner && scanner) { scanner.stop(); scanner = null; }
   const modal = document.getElementById('fr-scan-modal');
-  modal.style.display = 'none';
-  modal.innerHTML = '';
+  modal.style.display = 'none'; modal.innerHTML = '';
 }
 
 // ── Logout ────────────────────────────────────────────────────────────────────
@@ -526,25 +676,36 @@ async function doLogout() {
     try { await apiFetch('/api/fill/release-direction', 'POST', { claim_id: claimId }); } catch {}
     localStorage.removeItem(CLAIM_KEY);
   }
+  // Intentionally keep SANITIZE_KEY — if crew logs back in they can still confirm sanitation
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   window.location.href = '/login.html';
 }
 
 // ── Feedback ──────────────────────────────────────────────────────────────────
 
-function showFillSuccess(cubeLabel, entityName, fillsRemaining, isAdhoc = false) {
+function showFillDelivered(cubeLabel, entityName, fillsRemaining) {
   const body = document.getElementById('fr-body');
   const el   = document.createElement('div');
   el.className = 'fr-confirm-card';
   el.innerHTML = `
-    <div class="fr-confirm-card-title">${isAdhoc ? 'Ad-hoc fill logged' : 'Fill confirmed ✓'}</div>
+    <div class="fr-confirm-card-title">Fill delivered ✓</div>
     <div class="fr-confirm-card-body">
       ${escHtml(cubeLabel)} — ${escHtml(entityName ?? '—')}
       ${fillsRemaining !== null && fillsRemaining !== undefined
         ? `<br>${fillsRemaining} fill${fillsRemaining !== 1 ? 's' : ''} remaining for this entity`
         : ''}
+      <br><span style="font-size:11px;opacity:.65">Sanitize using the amber banner above when ready</span>
     </div>
   `;
+  body.prepend(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+function showToast(msg) {
+  const body = document.getElementById('fr-body');
+  const el   = document.createElement('div');
+  el.style.cssText = 'background:var(--accent-light);border:0.5px solid var(--accent);border-radius:var(--radius-lg);padding:.75rem 1rem;margin-bottom:.75rem;font-size:13px;color:var(--accent-text)';
+  el.textContent = msg;
   body.prepend(el);
   setTimeout(() => el.remove(), 4000);
 }
@@ -552,8 +713,7 @@ function showFillSuccess(cubeLabel, entityName, fillsRemaining, isAdhoc = false)
 function showScanError(msg) {
   const stat = document.getElementById('fr-scan-status');
   if (stat) {
-    stat.textContent  = msg;
-    stat.style.color  = 'var(--warn)';
+    stat.textContent = msg; stat.style.color = 'var(--warn)';
     setTimeout(() => { stat.style.color = ''; stat.textContent = 'Aim camera at the cube QR code'; }, 3000);
     return;
   }
@@ -573,10 +733,15 @@ function apiFetch(path, method = 'GET', body = null) {
   return fetch(path, opts);
 }
 
+function formatTime(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+  catch { return ''; }
+}
+
 function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
-function escAttr(str) { return String(str ?? '').replace(/"/g, '&quot;'); }
+function escAttr(str) { return String(str ?? '').replace(/"/g,'&quot;'); }
 
 boot();
