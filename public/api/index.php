@@ -207,6 +207,15 @@ $routes = [
     ['POST',   '/admin/borrow-rules',               'routes/admin/borrow_rules.php',  'handle_add_borrow_rule'],
     ['DELETE', '/admin/borrow-rules/:id',           'routes/admin/borrow_rules.php',  'handle_delete_borrow_rule'],
 
+    // Admin — QR print templates
+    ['GET',    '/admin/qr-templates',                    'routes/admin/qr_templates.php', 'handle_qrt_list'],
+    ['POST',   '/admin/qr-templates',                    'routes/admin/qr_templates.php', 'handle_qrt_create'],
+    ['DELETE', '/admin/qr-templates/:id',                'routes/admin/qr_templates.php', 'handle_qrt_delete'],
+    ['GET',    '/admin/qr-templates/:id/preview',        'routes/admin/qr_templates.php', 'handle_qrt_preview'],
+    ['GET',    '/admin/qr-templates/:id/zones',          'routes/admin/qr_templates.php', 'handle_qrt_get_zones'],
+    ['PUT',    '/admin/qr-templates/:id/zones',          'routes/admin/qr_templates.php', 'handle_qrt_save_zones'],
+    ['POST',   '/admin/qr-templates/:id/generate',       'routes/admin/qr_templates.php', 'handle_qrt_generate'],
+
     // Admin — users
     ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],
     ['GET',    '/admin/users',                   'routes/admin/users.php',       'handle_list'],
