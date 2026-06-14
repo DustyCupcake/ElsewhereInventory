@@ -14,6 +14,7 @@ import { initOrders }            from './orders.js?v=1.0.0';
 import { initStorageLocations }  from './storage_locations.js?v=1.0.0';
 import { initPersonTokens }      from './person_tokens.js?v=1.0.0';
 import { initFillRoute }         from './fill_route.js?v=1.0.0';
+import { initPrintTemplates }   from './print_templates.js?v=1.0.0';
 
 let toastTimer = null;
 let _user      = null;
@@ -31,6 +32,7 @@ const SECTION_PERMS = {
   'storage-locations': ['manage_equipment'],
   'person-badges':     ['manage_users'],
   'fill-route':        ['manage_barrios', 'manage_equipment'],
+  'print-templates':   ['manage_equipment'],
 };
 
 export function toast(msg, duration = 3500) {
@@ -124,6 +126,7 @@ function navigate(section) {
     case 'storage-locations':  initStorageLocations(content, toast);    break;
     case 'person-badges':      initPersonTokens(content, toast);        break;
     case 'fill-route':         initFillRoute(content, toast);           break;
+    case 'print-templates':    initPrintTemplates(content, toast);      break;
     default:            navigate(
       Object.keys(SECTION_PERMS).find(s => SECTION_PERMS[s].some(p => _perms.includes(p))) ?? 'barrios'
     );
