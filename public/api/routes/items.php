@@ -12,6 +12,7 @@ function handle_lookup(): void {
         'SELECT i.id, i.qr_code, i.status, i.notes, i.equipment_type_id,
                 i.dept_label, i.current_dept_id, i.current_barrio_id, i.current_artist_id, i.current_person_id,
                 i.current_location_id,
+                i.latitude AS item_lat, i.longitude AS item_lng,
                 i.home_location_id AS item_home_loc_id,
                 i.require_home_location AS item_require_home,
                 i.require_any_location AS item_require_any,
@@ -25,6 +26,7 @@ function handle_lookup(): void {
                 p.id AS person_id, p.display_name AS person_name,
                 cl.name AS current_location_name,
                 hl.id AS eff_home_loc_id, hl.name AS home_location_name,
+                hl.latitude AS home_lat, hl.longitude AS home_lng,
                 CONCAT(t.name, " #", i.item_number) AS display_name
          FROM equipment_items i
          JOIN equipment_types t ON t.id = i.equipment_type_id
@@ -78,8 +80,13 @@ function handle_lookup(): void {
         'current_location'     => $item['current_location_id']
             ? ['id' => (int)$item['current_location_id'], 'name' => $item['current_location_name']]
             : null,
+        'latitude'             => $item['item_lat']  !== null ? (float)$item['item_lat']  : null,
+        'longitude'            => $item['item_lng']  !== null ? (float)$item['item_lng']  : null,
         'home_location'        => $item['eff_home_loc_id']
-            ? ['id' => (int)$item['eff_home_loc_id'], 'name' => $item['home_location_name']]
+            ? ['id'        => (int)$item['eff_home_loc_id'],
+               'name'      => $item['home_location_name'],
+               'latitude'  => $item['home_lat']  !== null ? (float)$item['home_lat']  : null,
+               'longitude' => $item['home_lng']  !== null ? (float)$item['home_lng']  : null]
             : null,
         'require_home_location' => $eff_require_home,
         'require_any_location'  => $eff_require_any,

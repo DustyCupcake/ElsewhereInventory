@@ -161,6 +161,7 @@ function handle_fill_route(): void {
             i.id  AS cube_id,
             i.qr_code AS cube_qr,
             i.route_position,
+            i.latitude, i.longitude,
             CONCAT(t.name, ' #', i.item_number) AS cube_label,
             fr.entity_type, fr.entity_id,
             b.name AS entity_name,
@@ -187,6 +188,7 @@ function handle_fill_route(): void {
             i.id  AS cube_id,
             i.qr_code AS cube_qr,
             i.route_position,
+            i.latitude, i.longitude,
             CONCAT(t.name, ' #', i.item_number) AS cube_label,
             fr.entity_type, fr.entity_id,
             b.name AS entity_name,
@@ -220,6 +222,8 @@ function handle_fill_route(): void {
         $r['fills_requested']  = (int)$r['fills_requested'];
         $r['fills_completed']  = (int)$r['fills_completed'];
         $r['is_cube_specific'] = (bool)$r['is_cube_specific'];
+        $r['latitude']         = $r['latitude']  !== null ? (float)$r['latitude']  : null;
+        $r['longitude']        = $r['longitude'] !== null ? (float)$r['longitude'] : null;
     }
     unset($r);
 

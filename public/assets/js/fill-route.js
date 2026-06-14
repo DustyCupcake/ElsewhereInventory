@@ -36,6 +36,13 @@ function savePendingSanitizations() {
   try { localStorage.setItem(SANITIZE_KEY, JSON.stringify(pendingSanitizations)); } catch {}
 }
 
+// ── Map state ─────────────────────────────────────────────────────────────────
+let mapView    = false;
+let leafletMap = null;
+let mapMarkers = new Map(); // cube_qr → L.Marker
+let userMarker = null;
+let gpsWatchId = null;
+
 // ── Stop helpers ──────────────────────────────────────────────────────────────
 
 function initStopStatuses(newStops) {
@@ -84,6 +91,7 @@ async function boot() {
   document.getElementById('fr-logout-btn').onclick           = doLogout;
   document.getElementById('fr-scan-btn').onclick             = () => openScanModal('confirm');
   document.getElementById('fr-adhoc-btn').onclick            = () => openScanModal('adhoc');
+  document.getElementById('fr-map-btn').onclick              = toggleMapView;
   document.getElementById('fr-next-banner').onclick          = showProgressOverlay;
   document.getElementById('fr-progress-close').onclick       = hideProgressOverlay;
   document.getElementById('fr-sanitize-quick').onclick       = (e) => { e.stopPropagation(); confirmSanitizeAll(); };
@@ -250,13 +258,16 @@ function renderSanitizeBanner() {
   const body    = document.getElementById('fr-body');
   const n       = pendingSanitizations.length;
 
+  const mapContainer = document.getElementById('fr-map-container');
   if (n === 0) {
     banner.style.display = 'none';
     body?.classList.remove('has-sanitize-banner');
+    mapContainer?.classList.remove('has-sanitize-banner');
     return;
   }
   banner.style.display = 'flex';
   body?.classList.add('has-sanitize-banner');
+  mapContainer?.classList.add('has-sanitize-banner');
 
   const entityNames = [...new Set(pendingSanitizations.map(p => p.entity_name))];
   const label = entityNames.length <= 2
@@ -448,15 +459,20 @@ function markStopDone(index) {
   const el = document.querySelector(`.fr-stop[data-index="${index}"]`);
   if (el) {
     el.classList.add('completing');
-    setTimeout(() => { renderRoute(); renderNextStopBanner(); renderSanitizeBanner(); }, 350);
+    setTimeout(() => {
+      renderRoute(); renderNextStopBanner(); renderSanitizeBanner();
+      if (mapView) renderMapMarkers();
+    }, 350);
   } else {
     renderRoute(); renderNextStopBanner(); renderSanitizeBanner();
+    if (mapView) renderMapMarkers();
   }
 }
 
 function skipStop(cube_qr) {
   stopStatuses.set(cube_qr, 'skipped');
   renderRoute(); renderNextStopBanner();
+  if (mapView) renderMapMarkers();
 }
 
 // ── Entity-change prompt ──────────────────────────────────────────────────────
@@ -743,5 +759,173 @@ function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function escAttr(str) { return String(str ?? '').replace(/"/g,'&quot;'); }
+
+// ── Map view ──────────────────────────────────────────────────────────────────
+
+function toggleMapView() {
+  mapView = !mapView;
+  const mapContainer = document.getElementById('fr-map-container');
+  const listBody     = document.getElementById('fr-body');
+  const btn          = document.getElementById('fr-map-btn');
+
+  mapContainer.style.display = mapView ? 'block' : 'none';
+  listBody.style.display     = mapView ? 'none'  : '';
+  btn.classList.toggle('active', mapView);
+
+  if (mapView) {
+    _ensureMap();
+    renderMapMarkers();
+    _startGpsTracking();
+  } else {
+    _stopGpsTracking();
+  }
+}
+
+function _ensureMap() {
+  if (leafletMap) { leafletMap.invalidateSize(); return; }
+  // eslint-disable-next-line no-undef
+  leafletMap = L.map('fr-map', { zoomControl: true });
+  // eslint-disable-next-line no-undef
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(leafletMap);
+}
+
+function _stopIcon(status, isNext, routePos) {
+  const color = isNext     ? '#1d6ef5'
+    : status === 'filled'  ? '#16a34a'
+    : status === 'skipped' ? '#d97706'
+    : '#6b7280';
+  const size  = isNext ? 28 : 22;
+  const label = isNext ? '→' : (routePos ?? '?');
+  // eslint-disable-next-line no-undef
+  return L.divIcon({
+    html: `<div style="
+      width:${size}px;height:${size}px;background:${color};
+      border:2px solid #fff;border-radius:50%;
+      box-shadow:0 2px 6px rgba(0,0,0,.45);
+      display:flex;align-items:center;justify-content:center;
+      font-size:${isNext?12:10}px;color:#fff;font-weight:bold;
+      font-family:-apple-system,sans-serif;
+    ">${label}</div>`,
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2 + 4)],
+  });
+}
+
+function renderMapMarkers() {
+  if (!leafletMap) return;
+
+  // Clear old markers
+  mapMarkers.forEach(m => m.remove());
+  mapMarkers.clear();
+
+  const stopsWithCoords = allStops.filter(s => s.latitude != null && s.longitude != null);
+
+  if (!stopsWithCoords.length) {
+    // Show a no-coords message overlay on the map div
+    let msg = document.getElementById('fr-map-no-coords');
+    if (!msg) {
+      msg = document.createElement('div');
+      msg.id = 'fr-map-no-coords';
+      msg.className = 'fr-map-no-coords';
+      msg.innerHTML = 'No GPS coordinates set for cubes yet.<br><span style="font-size:12px;opacity:.7">Add coordinates via Admin → Equipment → Items.</span>';
+      document.getElementById('fr-map').appendChild(msg);
+    }
+    return;
+  }
+  document.getElementById('fr-map-no-coords')?.remove();
+
+  const nextQr  = getNextStop()?.cube_qr;
+  const bounds  = [];
+
+  stopsWithCoords.forEach(s => {
+    const status = stopStatuses.get(s.cube_qr) ?? 'pending';
+    const isNext = s.cube_qr === nextQr;
+    const icon   = _stopIcon(status, isNext, s.route_position);
+    const latlng = [s.latitude, s.longitude];
+    bounds.push(latlng);
+
+    const fillsLabel = `${s.fills_remaining} fill${s.fills_remaining !== 1 ? 's' : ''} requested`;
+    const fillBtn = (status === 'pending')
+      ? `<br><button data-qr="${s.cube_qr.replace(/"/g, '&quot;')}" class="fr-map-fill-popup"
+           style="margin-top:6px;padding:4px 14px;background:#2a5f3f;color:#fff;
+                  border:none;border-radius:4px;cursor:pointer;font-size:12px">Fill ✓</button>`
+      : '';
+
+    // eslint-disable-next-line no-undef
+    const marker = L.marker(latlng, { icon })
+      .addTo(leafletMap)
+      .bindPopup(`
+        <b style="font-size:13px">${escHtml(s.entity_name)}</b><br>
+        <span style="font-size:11px;color:#666">${escHtml(s.cube_label)}</span><br>
+        <span style="font-size:11px;color:#666">${fillsLabel}</span>
+        ${fillBtn}
+      `);
+
+    marker.on('popupopen', () => {
+      document.querySelectorAll('.fr-map-fill-popup').forEach(btn => {
+        btn.onclick = () => {
+          leafletMap.closePopup();
+          confirmFillByQr(btn.dataset.qr, null);
+        };
+      });
+    });
+
+    mapMarkers.set(s.cube_qr, marker);
+  });
+
+  if (bounds.length === 1) {
+    leafletMap.setView(bounds[0], 16);
+  } else if (bounds.length > 1) {
+    // eslint-disable-next-line no-undef
+    leafletMap.fitBounds(bounds, { padding: [48, 48] });
+  }
+}
+
+function _startGpsTracking() {
+  if (!navigator.geolocation || gpsWatchId !== null) return;
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      if (!leafletMap) return;
+      const latlng = [pos.coords.latitude, pos.coords.longitude];
+      if (userMarker) {
+        userMarker.setLatLng(latlng);
+      } else {
+        // eslint-disable-next-line no-undef
+        const icon = L.divIcon({
+          html: `<div style="
+            width:14px;height:14px;background:#3b82f6;
+            border:2px solid #fff;border-radius:50%;
+            box-shadow:0 0 0 5px rgba(59,130,246,.25);
+          "></div>`,
+          className: '',
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        });
+        // eslint-disable-next-line no-undef
+        userMarker = L.marker(latlng, { icon, zIndexOffset: 1000 })
+          .addTo(leafletMap)
+          .bindTooltip('You', { permanent: false, direction: 'top' });
+      }
+    },
+    null,
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  );
+}
+
+function _stopGpsTracking() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  if (userMarker && leafletMap) {
+    userMarker.remove();
+    userMarker = null;
+  }
+}
 
 boot();

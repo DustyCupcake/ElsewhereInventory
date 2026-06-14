@@ -171,6 +171,7 @@ $routes = [
     ['DELETE', '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_delete_type'],
     ['GET',    '/admin/items',                   'routes/admin/equipment.php',   'handle_list_items'],
     ['POST',   '/admin/items',                   'routes/admin/equipment.php',   'handle_create_items'],
+    ['POST',   '/admin/items/bulk-update',       'routes/admin/equipment.php',   'handle_bulk_update_items'],
     ['PUT',    '/admin/items',                   'routes/admin/equipment.php',   'handle_update_item'],
     ['DELETE', '/admin/items',                   'routes/admin/equipment.php',   'handle_delete_item'],
     ['GET',    '/admin/items/qr-sheet',          'routes/admin/qr_sheet.php',    'handle_qr_sheet'],
