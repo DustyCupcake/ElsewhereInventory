@@ -398,11 +398,20 @@ CREATE TABLE IF NOT EXISTS fill_requests (
 -- ─── QR Print Templates ──────────────────────────────────────────────────────
 -- Stores PDF/image templates and zone definitions for QR label generation.
 CREATE TABLE IF NOT EXISTS qr_templates (
-    id            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    name          VARCHAR(128)  NOT NULL,
-    pdf_filename  VARCHAR(256)  NOT NULL,
-    item_filter   VARCHAR(64)   NULL,
-    created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id             INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    name           VARCHAR(128)  NOT NULL,
+    pdf_filename   VARCHAR(256)  NULL,
+    item_filter    VARCHAR(64)   NULL,
+    layout_mode    ENUM('page','grid') NOT NULL DEFAULT 'page',
+    tag_width_mm   FLOAT NULL,
+    tag_height_mm  FLOAT NULL,
+    page_cols      TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    page_rows      TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    margin_mm      FLOAT NOT NULL DEFAULT 10,
+    gap_mm         FLOAT NOT NULL DEFAULT 5,
+    page_width_mm  FLOAT NULL,
+    page_height_mm FLOAT NULL,
+    created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
