@@ -2,7 +2,7 @@
  * Scan In tab — return equipment or validate vouchers.
  */
 
-import { get, post } from './api.js?v=1.0.1';
+import { get, post, put } from './api.js?v=1.0.1';
 import { Scanner, scanFeedbackSuccess, scanFeedbackError } from './scanner.js?v=1.0.1';
 import { toast, getCurrentUser } from './app.js?v=1.0.1';
 import { scanOverlay } from './scan-overlay.js?v=1.0.0';
@@ -232,12 +232,26 @@ async function handleScan(qr, container) {
 
     const buttons = [];
 
+    // Navigation button — opens maps to guide user to home location (doesn't close overlay)
+    const homeLat = item.home_location?.latitude;
+    const homeLng = item.home_location?.longitude;
+    const navBtn = (homeLat != null)
+      ? [{
+          label: `Navigate to ${item.home_location.name}`,
+          action: () => window.open(
+            `https://maps.apple.com/?daddr=${homeLat},${homeLng}`, '_blank'
+          ),
+        }]
+      : [];
+
     if (item.current_person && item.borrowable && item.borrow_eligible) {
       buttons.push({ label: __('confirmReturn'), action: () => doConfirmReturn(qr) });
       buttons.push({ label: __('borrowTransfer'), action: () => startPersonBorrowFlow(item, container, true) });
+      buttons.push(...navBtn);
       buttons.push({ label: _c('undo'), action: doReset });
     } else {
       buttons.push({ label: __('confirmReturn'), action: () => doConfirmReturn(qr) });
+      buttons.push(...navBtn);
       buttons.push({ label: _c('undo'),          action: doReset });
     }
 
@@ -344,12 +358,15 @@ async function confirmCheckin(qr, container) {
     } else if (res.success) {
       const locMsg = pendingLocation ? ` → ${pendingLocation.name}` : '';
       toast((__('returned') || 'Returned').replace('[NAME]', lastItem?.name ?? qr) + locMsg);
+      // Offer to update home location if returned to a different spot
+      const snapItem = lastItem;
+      const snapLoc  = pendingLocation;
+      await _maybePromptHomeLocation(snapItem, snapLoc, container);
+      return;
     } else {
       toast(__('notCheckedOut'));
     }
   } catch (e) {
-    // Server rejected due to location requirement — show as inline error
-    // and let the user try again without re-rendering
     scanFeedbackError();
     toast(e.message || 'Error returning item');
     render(container);
@@ -357,6 +374,42 @@ async function confirmCheckin(qr, container) {
   }
 
   render(container);
+}
+
+async function _maybePromptHomeLocation(item, location, container) {
+  const user       = getCurrentUser();
+  const canManage  = user?.permissions?.includes('manage_equipment');
+  const homeId     = item?.home_location?.id;
+  const locId      = location?.id;
+
+  if (canManage && homeId && locId && locId !== homeId) {
+    scanOverlay.show({
+      state: 'info',
+      title: 'Update home location?',
+      subtitle: `Home is "${item.home_location.name}". Make "${location.name}" the new home for ${item.name}?`,
+      buttons: [
+        {
+          label: `Set home to ${location.name}`,
+          action: async () => {
+            scanOverlay.hide();
+            try {
+              await put('/admin/items', { id: item.id, home_location_id: location.id });
+              toast(`Home location updated to ${location.name}`);
+            } catch (e) {
+              toast('Could not update: ' + e.message);
+            }
+            render(container);
+          },
+        },
+        {
+          label: 'Keep current home',
+          action: () => { scanOverlay.hide(); render(container); },
+        },
+      ],
+    });
+  } else {
+    render(container);
+  }
 }
 
 // ─── Person borrow flow ───────────────────────────────────────────────────────

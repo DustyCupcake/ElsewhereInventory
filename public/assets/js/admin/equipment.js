@@ -10,6 +10,7 @@ let _types     = [];
 let _items     = [];
 let _locations = [];
 let _activeTab = 'types';
+let _selected  = new Set(); // selected item ids for bulk actions
 
 export async function initEquipment(container, toast) {
   _toast = toast;
@@ -48,12 +49,15 @@ function renderShell(container) {
     openAddType, openEditType, saveType, deleteType,
     openAddItems, saveItems,
     editItem, deleteItem,
+    saveItemEdit, cancelItemEdit,
+    toggleSelect, toggleSelectAll, applyBulk,
     exportQR,
   };
 }
 
 function switchTab(name) {
   _activeTab = name;
+  _selected  = new Set();
   document.querySelectorAll('.section-tab[data-etab]').forEach(b => {
     b.classList.toggle('active', b.dataset.etab === name);
   });
@@ -146,7 +150,7 @@ function showTypeForm(t) {
       </label>
 
       <div class="field" style="margin-top:.75rem">
-        <label>Home storage location (optional)</label>
+        <label>Home storage location (optional — default for all items of this type)</label>
         <select id="et-home-loc">
           <option value="">— None —</option>
           ${locOptions}
@@ -230,20 +234,19 @@ async function renderItemsTable(filter_type_id = '') {
     `<option value="${t.id}" ${String(filter_type_id) === String(t.id) ? 'selected' : ''}>${esc(t.name)}</option>`
   ).join('');
 
-  const addBtn = `<button class="btn primary sm" style="margin-bottom:1rem;margin-right:.5rem" onclick="window._eq.openAddItems()">+ Add items</button>`;
+  const addBtn    = `<button class="btn primary sm" style="margin-bottom:1rem;margin-right:.5rem" onclick="window._eq.openAddItems()">+ Add items</button>`;
   const exportBtn = `<button class="btn sm" style="margin-bottom:1rem" onclick="window._eq.exportQR('${filter_type_id}')">Export QR sheet</button>`;
 
   const filter = `
     <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
       <span style="font-size:13px;color:var(--text2)">Filter by type:</span>
-      <select id="items-type-filter" style="width:auto;margin:0" onchange="window._eq.tab('items')">
+      <select id="items-type-filter" style="width:auto;margin:0">
         <option value="">All types</option>
         ${typeOptions}
       </select>
     </div>
   `;
 
-  // Re-read filter after rendering
   setTimeout(() => {
     const sel = document.getElementById('items-type-filter');
     if (sel) sel.addEventListener('change', () => renderItemsTable(sel.value));
@@ -254,29 +257,122 @@ async function renderItemsTable(filter_type_id = '') {
     return;
   }
 
-  area.innerHTML = addBtn + exportBtn + filter + `
+  const bulkBar = `
+    <div id="eq-bulk-bar" style="display:none;align-items:center;gap:.5rem;flex-wrap:wrap;
+         padding:.6rem .75rem;margin-bottom:.5rem;background:var(--accent-light);
+         border:0.5px solid var(--accent);border-radius:var(--radius);font-size:13px">
+      <span id="eq-bulk-count" style="color:var(--accent-text);font-weight:500;white-space:nowrap"></span>
+      <select id="eq-bulk-loc" style="margin:0;width:auto">
+        <option value="">— Set home location —</option>
+        ${_locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}
+        <option value="clear">Clear home location</option>
+      </select>
+      <select id="eq-bulk-req" style="margin:0;width:auto">
+        <option value="">— Set require flag —</option>
+        <option value="require_home">Must return to home location</option>
+        <option value="require_any">Must scan any location</option>
+        <option value="inherit">Inherit from type</option>
+      </select>
+      <button class="btn primary sm" onclick="window._eq.applyBulk()">Apply to selected</button>
+    </div>
+  `;
+
+  area.innerHTML = addBtn + exportBtn + filter + bulkBar + `
     <table class="data-table">
-      <thead><tr><th>Item</th><th>QR code</th><th>Status</th><th>Barrio</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th style="width:32px"><input type="checkbox" id="eq-sel-all" title="Select all" onchange="window._eq.toggleSelectAll(this.checked)"></th>
+          <th>Item</th><th>QR code</th><th>Status</th><th>Home location</th><th>GPS</th><th></th>
+        </tr>
+      </thead>
       <tbody>
-        ${_items.map(it => `
-          <tr>
+        ${_items.map(it => {
+          const sel = _selected.has(it.id);
+          const homeLoc = it.home_location_name
+            ? `<span title="Per-item override">📍 ${esc(it.home_location_name)}</span>`
+            : '<span style="color:var(--text3)">—</span>';
+          const hasGps = it.latitude != null;
+          return `
+          <tr id="item-row-${it.id}">
+            <td><input type="checkbox" data-id="${it.id}" ${sel ? 'checked' : ''}
+              onchange="window._eq.toggleSelect(${it.id}, this.checked)"></td>
             <td>
               <div>${esc(it.display_name)}</div>
               <div style="font-size:11px;color:var(--text3)">${esc(it.type_name)}</div>
             </td>
             <td style="font-family:monospace;font-size:12px">${esc(it.qr_code)}</td>
             <td><span class="badge ${it.status}">${it.status}</span></td>
-            <td style="font-size:13px;color:var(--text2)">${it.current_barrio ? esc(it.current_barrio) : '—'}</td>
+            <td style="font-size:12px">${homeLoc}</td>
+            <td style="font-size:12px;color:var(--text3)">${hasGps ? '✓' : '—'}</td>
             <td>
               <div class="table-actions">
+                <button class="action-btn" onclick="window._eq.editItem(${it.id})">Edit</button>
                 <button class="action-btn danger" onclick="window._eq.deleteItem(${it.id})">Retire</button>
               </div>
             </td>
           </tr>
-        `).join('')}
+        `}).join('')}
       </tbody>
     </table>
   `;
+
+  _updateBulkBar();
+}
+
+function toggleSelect(id, checked) {
+  if (checked) _selected.add(id);
+  else _selected.delete(id);
+  _updateBulkBar();
+  const allBox = document.getElementById('eq-sel-all');
+  if (allBox) allBox.checked = _selected.size === _items.length;
+}
+
+function toggleSelectAll(checked) {
+  _selected = checked ? new Set(_items.map(i => i.id)) : new Set();
+  document.querySelectorAll('input[data-id]').forEach(cb => { cb.checked = checked; });
+  _updateBulkBar();
+}
+
+function _updateBulkBar() {
+  const bar = document.getElementById('eq-bulk-bar');
+  if (!bar) return;
+  const n = _selected.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  const cnt = document.getElementById('eq-bulk-count');
+  if (cnt) cnt.textContent = `${n} item${n !== 1 ? 's' : ''} selected`;
+}
+
+async function applyBulk() {
+  if (!_selected.size) return;
+  const locVal = document.getElementById('eq-bulk-loc')?.value;
+  const reqVal = document.getElementById('eq-bulk-req')?.value;
+
+  const fields = {};
+  if (locVal === 'clear') {
+    fields.home_location_id = null;
+  } else if (locVal) {
+    fields.home_location_id = +locVal;
+  }
+
+  if (reqVal === 'require_home') {
+    fields.require_home_location = true;
+    fields.require_any_location  = false;
+  } else if (reqVal === 'require_any') {
+    fields.require_home_location = false;
+    fields.require_any_location  = true;
+  } else if (reqVal === 'inherit') {
+    fields.require_home_location = null;
+    fields.require_any_location  = null;
+  }
+
+  if (!Object.keys(fields).length) { _toast('Select something to apply'); return; }
+
+  try {
+    const res = await post('/admin/items/bulk-update', { item_ids: [..._selected], fields });
+    _toast(`Updated ${res.updated} item${res.updated !== 1 ? 's' : ''}`);
+    _selected = new Set();
+    await renderItemsTable(document.getElementById('items-type-filter')?.value || '');
+  } catch (e) { _toast('Error: ' + e.message); }
 }
 
 function openAddItems() {
@@ -323,9 +419,124 @@ async function saveItems() {
   } catch (e) { _toast('Error: ' + e.message); }
 }
 
-async function editItem(id) {
-  // Currently just status/notes edit — kept simple
-  _toast('Use retire to remove items from service');
+function editItem(id) {
+  const it = _items.find(x => x.id === id);
+  if (!it) return;
+
+  const locOptions = _locations.map(l =>
+    `<option value="${l.id}" ${String(it.home_location_id) === String(l.id) ? 'selected' : ''}>${esc(l.name)}</option>`
+  ).join('');
+
+  // Tri-state for require flags: null = inherit, true = yes, false = no
+  const reqHomeVal  = it.require_home_location === null  ? '' : (it.require_home_location  ? 'yes' : 'no');
+  const reqAnyVal   = it.require_any_location  === null  ? '' : (it.require_any_location   ? 'yes' : 'no');
+
+  const form = document.getElementById('eq-form-area');
+  form.innerHTML = `
+    <div class="form-card">
+      <h2>Edit item: ${esc(it.display_name)}</h2>
+      <input type="hidden" id="ei-id" value="${it.id}">
+
+      <div class="field">
+        <label>Per-item home location <span style="font-size:11px;color:var(--text3)">(overrides type default)</span></label>
+        <select id="ei-home-loc">
+          <option value="">— Use type default —</option>
+          ${locOptions}
+        </select>
+      </div>
+
+      <div class="form-row" style="margin-top:.5rem">
+        <div class="field">
+          <label>Require home location</label>
+          <select id="ei-req-home" style="margin:0">
+            <option value="" ${reqHomeVal === '' ? 'selected' : ''}>Inherit from type</option>
+            <option value="yes" ${reqHomeVal === 'yes' ? 'selected' : ''}>Yes — must return to home</option>
+            <option value="no"  ${reqHomeVal === 'no'  ? 'selected' : ''}>No — override type</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Require any location scan</label>
+          <select id="ei-req-any" style="margin:0">
+            <option value="" ${reqAnyVal === '' ? 'selected' : ''}>Inherit from type</option>
+            <option value="yes" ${reqAnyVal === 'yes' ? 'selected' : ''}>Yes — must scan any location</option>
+            <option value="no"  ${reqAnyVal === 'no'  ? 'selected' : ''}>No — override type</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:.5rem">
+        <label>Notes</label>
+        <input type="text" id="ei-notes" value="${esc(it.notes ?? '')}" maxlength="255" placeholder="Optional notes">
+      </div>
+
+      <div style="margin-top:.75rem">
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:.4rem;color:var(--text2)">
+          GPS coordinates <span style="font-size:11px;font-weight:normal">(for water cubes or mobile assets)</span>
+        </label>
+        <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+          <div class="field" style="margin:0;flex:1;min-width:120px">
+            <label>Latitude</label>
+            <input type="number" id="ei-lat" value="${it.latitude ?? ''}" step="any" placeholder="e.g. 40.7851">
+          </div>
+          <div class="field" style="margin:0;flex:1;min-width:120px">
+            <label>Longitude</label>
+            <input type="number" id="ei-lng" value="${it.longitude ?? ''}" step="any" placeholder="e.g. -119.2063">
+          </div>
+          <button class="btn sm" style="margin:0;flex-shrink:0" onclick="window._eq._useGps('ei-lat','ei-lng')">📍 Use my location</button>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn primary sm" onclick="window._eq.saveItemEdit()">Save</button>
+        <button class="btn sm" onclick="window._eq.cancelItemEdit()">Cancel</button>
+      </div>
+    </div>
+  `;
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  window._eq._useGps = (latId, lngId) => {
+    if (!navigator.geolocation) { _toast('Geolocation not available'); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const latEl = document.getElementById(latId);
+        const lngEl = document.getElementById(lngId);
+        if (latEl) latEl.value = pos.coords.latitude.toFixed(7);
+        if (lngEl) lngEl.value = pos.coords.longitude.toFixed(7);
+      },
+      () => _toast('Could not get location — check permissions')
+    );
+  };
+}
+
+async function saveItemEdit() {
+  const id       = +document.getElementById('ei-id').value;
+  const homeLoc  = document.getElementById('ei-home-loc').value;
+  const reqHome  = document.getElementById('ei-req-home').value;
+  const reqAny   = document.getElementById('ei-req-any').value;
+  const notes    = document.getElementById('ei-notes').value.trim();
+  const latVal   = document.getElementById('ei-lat').value.trim();
+  const lngVal   = document.getElementById('ei-lng').value.trim();
+
+  if (!id) return;
+
+  const payload = { id };
+  payload.home_location_id       = homeLoc !== '' ? +homeLoc : null;
+  payload.require_home_location  = reqHome === '' ? null : reqHome === 'yes';
+  payload.require_any_location   = reqAny  === '' ? null : reqAny  === 'yes';
+  payload.notes                  = notes || null;
+  payload.latitude               = latVal  !== '' ? parseFloat(latVal)  : null;
+  payload.longitude              = lngVal  !== '' ? parseFloat(lngVal)  : null;
+
+  try {
+    await put('/admin/items', payload);
+    _toast('Item updated');
+    document.getElementById('eq-form-area').innerHTML = '';
+    await renderItemsTable(document.getElementById('items-type-filter')?.value || '');
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+function cancelItemEdit() {
+  document.getElementById('eq-form-area').innerHTML = '';
 }
 
 async function deleteItem(id) {
@@ -343,4 +554,4 @@ function exportQR(type_id = '') {
   window.open(url, '_blank');
 }
 
-const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

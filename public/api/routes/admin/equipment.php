@@ -144,22 +144,31 @@ function handle_list_items(): void {
     $whereSQL = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
     $stmt = db()->prepare(
-        "SELECT i.id, i.qr_code, i.item_number, i.status, i.notes, i.route_position, i.created_at,
+        "SELECT i.id, i.qr_code, i.item_number, i.status, i.notes, i.route_position,
+                i.latitude, i.longitude, i.created_at,
+                i.home_location_id, i.require_home_location, i.require_any_location,
                 t.id AS type_id, t.name AS type_name, t.category,
                 CONCAT(t.name, ' #', i.item_number) AS display_name,
-                b.name AS current_barrio
+                b.name AS current_barrio,
+                hl.name AS home_location_name
          FROM equipment_items i
          JOIN equipment_types t ON t.id = i.equipment_type_id
          LEFT JOIN barrios b    ON b.id = i.current_barrio_id
+         LEFT JOIN storage_locations hl ON hl.id = i.home_location_id
          $whereSQL
          ORDER BY t.name, i.item_number"
     );
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
-        $r['id']          = (int)$r['id'];
-        $r['item_number'] = (int)$r['item_number'];
-        $r['type_id']     = (int)$r['type_id'];
+        $r['id']             = (int)$r['id'];
+        $r['item_number']    = (int)$r['item_number'];
+        $r['type_id']        = (int)$r['type_id'];
+        $r['home_location_id'] = $r['home_location_id'] ? (int)$r['home_location_id'] : null;
+        $r['require_home_location'] = $r['require_home_location'] !== null ? (bool)$r['require_home_location'] : null;
+        $r['require_any_location']  = $r['require_any_location']  !== null ? (bool)$r['require_any_location']  : null;
+        $r['latitude']  = $r['latitude']  !== null ? (float)$r['latitude']  : null;
+        $r['longitude'] = $r['longitude'] !== null ? (float)$r['longitude'] : null;
     }
     unset($r);
     json_ok(['items' => $rows]);
@@ -238,7 +247,7 @@ function handle_create_items(): void {
 
 function handle_update_item(): void {
     require_method('PUT');
-    require_admin();
+    require_permission('manage_equipment');
     verify_csrf();
 
     $b              = body();
@@ -249,6 +258,27 @@ function handle_update_item(): void {
         ? ($b['route_position'] === null || $b['route_position'] === '' ? null : (int)$b['route_position'])
         : 'unset';
 
+    // home_location_id: false = not provided, null = clear, int = set
+    $home_location_id = array_key_exists('home_location_id', $b)
+        ? ($b['home_location_id'] !== null && $b['home_location_id'] !== '' ? (int)$b['home_location_id'] : null)
+        : false;
+
+    // require flags: 'unset' = not provided, null = inherit from type, bool = override
+    $require_home = array_key_exists('require_home_location', $b)
+        ? ($b['require_home_location'] === null ? null : (!empty($b['require_home_location']) ? 1 : 0))
+        : 'unset';
+    $require_any  = array_key_exists('require_any_location', $b)
+        ? ($b['require_any_location']  === null ? null : (!empty($b['require_any_location'])  ? 1 : 0))
+        : 'unset';
+
+    // GPS coordinates
+    $latitude  = array_key_exists('latitude',  $b)
+        ? ($b['latitude']  !== null && $b['latitude']  !== '' ? (float)$b['latitude']  : null)
+        : 'unset';
+    $longitude = array_key_exists('longitude', $b)
+        ? ($b['longitude'] !== null && $b['longitude'] !== '' ? (float)$b['longitude'] : null)
+        : 'unset';
+
     if (!$id) json_error('id required');
     if ($status !== null && !in_array($status, ['available', 'checked-out', 'retired'], true)) {
         json_error('invalid status');
@@ -256,9 +286,14 @@ function handle_update_item(): void {
 
     $sets   = [];
     $params = [];
-    if ($status !== null)            { $sets[] = 'status = ?';         $params[] = $status; }
-    if ($notes  !== null)            { $sets[] = 'notes = ?';          $params[] = $notes; }
-    if ($route_position !== 'unset') { $sets[] = 'route_position = ?'; $params[] = $route_position; }
+    if ($status !== null)            { $sets[] = 'status = ?';            $params[] = $status; }
+    if ($notes  !== null)            { $sets[] = 'notes = ?';             $params[] = $notes; }
+    if ($route_position !== 'unset') { $sets[] = 'route_position = ?';   $params[] = $route_position; }
+    if ($home_location_id !== false) { $sets[] = 'home_location_id = ?'; $params[] = $home_location_id; }
+    if ($require_home     !== 'unset') { $sets[] = 'require_home_location = ?'; $params[] = $require_home; }
+    if ($require_any      !== 'unset') { $sets[] = 'require_any_location = ?';  $params[] = $require_any; }
+    if ($latitude         !== 'unset') { $sets[] = 'latitude = ?';        $params[] = $latitude; }
+    if ($longitude        !== 'unset') { $sets[] = 'longitude = ?';       $params[] = $longitude; }
 
     if (empty($sets)) json_error('Nothing to update');
 
@@ -268,6 +303,70 @@ function handle_update_item(): void {
 
     if ($stmt->rowCount() === 0) json_error('Item not found', 404);
     json_ok(['success' => true]);
+}
+
+function handle_bulk_update_items(): void {
+    require_method('POST');
+    require_permission('manage_equipment');
+    verify_csrf();
+
+    $b        = body();
+    $item_ids = $b['item_ids'] ?? [];
+    $fields   = $b['fields']   ?? [];
+
+    if (!is_array($item_ids) || empty($item_ids)) json_error('item_ids required');
+    if (!is_array($fields)   || empty($fields))   json_error('fields required');
+
+    // Sanitize ids
+    $item_ids = array_filter(array_map('intval', $item_ids));
+    if (empty($item_ids)) json_error('No valid item ids');
+    if (count($item_ids) > 500) json_error('Too many items — max 500');
+
+    $allowed = ['home_location_id', 'require_home_location', 'require_any_location',
+                'status', 'notes', 'latitude', 'longitude'];
+    $sets    = [];
+    $params  = [];
+
+    foreach ($allowed as $key) {
+        if (!array_key_exists($key, $fields)) continue;
+        $val = $fields[$key];
+        switch ($key) {
+            case 'home_location_id':
+                $sets[] = 'home_location_id = ?';
+                $params[] = ($val !== null && $val !== '') ? (int)$val : null;
+                break;
+            case 'require_home_location':
+            case 'require_any_location':
+                $sets[] = "$key = ?";
+                $params[] = $val === null ? null : (!empty($val) ? 1 : 0);
+                break;
+            case 'status':
+                if (!in_array($val, ['available', 'checked-out', 'retired'], true)) continue 2;
+                $sets[] = 'status = ?'; $params[] = $val;
+                break;
+            case 'notes':
+                $sets[] = 'notes = ?'; $params[] = $val;
+                break;
+            case 'latitude':
+            case 'longitude':
+                $sets[] = "$key = ?";
+                $params[] = ($val !== null && $val !== '') ? (float)$val : null;
+                break;
+        }
+    }
+
+    if (empty($sets)) json_error('No valid fields to update');
+
+    $placeholders = implode(',', array_fill(0, count($item_ids), '?'));
+    $params       = array_merge($params, $item_ids);
+
+    $stmt = db()->prepare(
+        'UPDATE equipment_items SET ' . implode(', ', $sets) .
+        " WHERE id IN ($placeholders)"
+    );
+    $stmt->execute($params);
+
+    json_ok(['updated' => $stmt->rowCount()]);
 }
 
 function handle_delete_item(): void {

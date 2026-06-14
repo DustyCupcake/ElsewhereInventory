@@ -60,6 +60,7 @@ function render() {
           <th>Name</th>
           <th>Description</th>
           <th>Items here</th>
+          <th>GPS</th>
           <th></th>
         </tr>
       </thead>
@@ -69,6 +70,9 @@ function render() {
             <td>${esc(loc.name)}</td>
             <td style="color:var(--text2);font-size:12px">${esc(loc.description || '—')}</td>
             <td>${loc.item_count}</td>
+            <td style="font-size:12px;color:var(--text3)">${loc.latitude != null
+              ? `<a href="https://maps.apple.com/?ll=${loc.latitude},${loc.longitude}" target="_blank" title="${loc.latitude}, ${loc.longitude}">📍</a>`
+              : '—'}</td>
             <td>
               <div class="table-actions">
                 <button class="action-btn" onclick="window._sl.openEdit(${loc.id})">Edit</button>
@@ -101,6 +105,24 @@ function showForm(loc) {
         <input type="text" id="sl-desc" value="${esc(loc?.description ?? '')}" placeholder="e.g. Board near main gate" maxlength="255">
       </div>
       ${loc?.qr_code ? `<div class="hint" style="margin-bottom:.5rem">QR code: <code>${esc(loc.qr_code)}</code></div>` : ''}
+
+      <div style="margin-top:.75rem">
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:.4rem;color:var(--text2)">
+          GPS coordinates <span style="font-size:11px;font-weight:normal">(optional — enables map navigation to this location)</span>
+        </label>
+        <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+          <div class="field" style="margin:0;flex:1;min-width:120px">
+            <label>Latitude</label>
+            <input type="number" id="sl-lat" value="${loc?.latitude ?? ''}" step="any" placeholder="e.g. 40.7851">
+          </div>
+          <div class="field" style="margin:0;flex:1;min-width:120px">
+            <label>Longitude</label>
+            <input type="number" id="sl-lng" value="${loc?.longitude ?? ''}" step="any" placeholder="e.g. -119.2063">
+          </div>
+          <button class="btn sm" style="margin:0;flex-shrink:0" type="button" onclick="window._sl._useGps()">📍 Use my location</button>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._sl.save()">Save</button>
         <button class="btn sm" onclick="document.getElementById('sl-form-area').innerHTML=''">Cancel</button>
@@ -108,21 +130,43 @@ function showForm(loc) {
     </div>
   `;
   document.getElementById('sl-name')?.focus();
+
+  window._sl._useGps = () => {
+    if (!navigator.geolocation) { _toast('Geolocation not available'); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const latEl = document.getElementById('sl-lat');
+        const lngEl = document.getElementById('sl-lng');
+        if (latEl) latEl.value = pos.coords.latitude.toFixed(7);
+        if (lngEl) lngEl.value = pos.coords.longitude.toFixed(7);
+      },
+      () => _toast('Could not get location — check browser permissions')
+    );
+  };
 }
 
 async function save() {
-  const id   = document.getElementById('sl-id')?.value;
-  const name = document.getElementById('sl-name')?.value.trim();
-  const desc = document.getElementById('sl-desc')?.value.trim();
+  const id     = document.getElementById('sl-id')?.value;
+  const name   = document.getElementById('sl-name')?.value.trim();
+  const desc   = document.getElementById('sl-desc')?.value.trim();
+  const latVal = document.getElementById('sl-lat')?.value.trim();
+  const lngVal = document.getElementById('sl-lng')?.value.trim();
 
   if (!name) { _toast('Name required'); return; }
 
+  const payload = {
+    name,
+    description: desc || null,
+    latitude:  latVal !== '' ? parseFloat(latVal)  : null,
+    longitude: lngVal !== '' ? parseFloat(lngVal)  : null,
+  };
+
   try {
     if (id) {
-      await put(`/admin/storage-locations/${id}`, { id: +id, name, description: desc });
+      await put(`/admin/storage-locations/${id}`, { id: +id, ...payload });
       _toast('Location updated');
     } else {
-      await post('/admin/storage-locations', { name, description: desc });
+      await post('/admin/storage-locations', payload);
       _toast('Location created');
     }
     document.getElementById('sl-form-area').innerHTML = '';
