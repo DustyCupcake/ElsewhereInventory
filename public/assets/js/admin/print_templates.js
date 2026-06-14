@@ -20,6 +20,7 @@ export async function initPrintTemplates(container, toast) {
     editZones, backToList,
     addZone, removeZone, saveZones,
     generate, del: deleteTemplate,
+    _toggleGridFields,
     _zoneChange(idx, field, value) {
       if (_zones[idx]) {
         _zones[idx][field] = value;
@@ -72,6 +73,7 @@ function renderList(wrap) {
     <table class="data-table">
       <thead><tr>
         <th>Name</th>
+        <th>Layout</th>
         <th>Item Filter</th>
         <th>Created</th>
         <th></th>
@@ -80,6 +82,7 @@ function renderList(wrap) {
         ${_templates.map(t => `
           <tr>
             <td><strong>${esc(t.name)}</strong></td>
+            <td>${layoutBadge(t)}</td>
             <td>${t.item_filter ? `<span class="badge active">${esc(t.item_filter)}</span>` : '<span style="color:var(--text3)">All items</span>'}</td>
             <td style="color:var(--text2);font-size:.85em">${fmtDate(t.created_at)}</td>
             <td class="table-actions">
@@ -111,11 +114,52 @@ function openNew() {
         <input type="text" id="pt-new-filter" placeholder="e.g. water_cube — leave blank for all items" autocomplete="off">
       </div>
       <div class="form-row">
-        <label>Template File <span style="color:var(--text3);font-size:.85em">(PDF, PNG or JPEG)</span></label>
+        <label>Layout</label>
+        <select id="pt-new-mode" onchange="window._pt._toggleGridFields()">
+          <option value="page">Full page — one item per page, zones are page-relative</option>
+          <option value="grid">Label grid — multiple items per page, zones are tag-relative</option>
+        </select>
+      </div>
+
+      <div id="pt-grid-fields" style="display:none">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:.75rem;font-size:.82rem;color:var(--text2)">
+          Zones are positioned relative to the top-left of each tag, in mm.
+        </div>
+        <div class="form-row">
+          <label>Tag Width (mm)</label>
+          <input type="number" id="pt-tag-w" step="0.1" min="1" placeholder="e.g. 90">
+          <label>Tag Height (mm)</label>
+          <input type="number" id="pt-tag-h" step="0.1" min="1" placeholder="e.g. 50">
+        </div>
+        <div class="form-row">
+          <label>Columns</label>
+          <input type="number" id="pt-cols" min="1" max="20" value="2">
+          <label>Rows</label>
+          <input type="number" id="pt-rows" min="1" max="20" value="5">
+        </div>
+        <div class="form-row">
+          <label>Page margin (mm)</label>
+          <input type="number" id="pt-margin" step="0.1" min="0" value="10">
+          <label>Gap between tags (mm)</label>
+          <input type="number" id="pt-gap" step="0.1" min="0" value="5">
+        </div>
+        <div class="form-row">
+          <label>Page width (mm) <span style="color:var(--text3);font-size:.85em">blank = A4</span></label>
+          <input type="number" id="pt-pg-w" step="0.1" min="1" placeholder="210">
+          <label>Page height (mm) <span style="color:var(--text3);font-size:.85em">blank = A4</span></label>
+          <input type="number" id="pt-pg-h" step="0.1" min="1" placeholder="297">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label id="pt-file-label">Template File <span style="color:var(--text3);font-size:.85em">(PDF, PNG or JPEG)</span></label>
         <input type="file" id="pt-new-file" accept=".pdf,.png,.jpg,.jpeg">
       </div>
+      <div id="pt-file-hint" style="display:none;font-size:.8rem;color:var(--text2);margin-bottom:.5rem">
+        Optional — used as the per-tag background image.
+      </div>
       <div class="form-actions">
-        <button class="btn primary" id="pt-save-btn" onclick="window._pt.saveNew()">Upload</button>
+        <button class="btn primary" id="pt-save-btn" onclick="window._pt.saveNew()">Create</button>
         <button class="btn" onclick="window._pt.cancelNew()">Cancel</button>
       </div>
     </div>`;
@@ -126,22 +170,53 @@ function cancelNew() {
   if (f) { f.style.display = 'none'; f.innerHTML = ''; }
 }
 
+function _toggleGridFields() {
+  const mode      = document.getElementById('pt-new-mode')?.value;
+  const gridFields = document.getElementById('pt-grid-fields');
+  const fileHint  = document.getElementById('pt-file-hint');
+  const fileLabel = document.getElementById('pt-file-label');
+  const isGrid    = mode === 'grid';
+  if (gridFields) gridFields.style.display = isGrid ? '' : 'none';
+  if (fileHint)  fileHint.style.display  = isGrid ? '' : 'none';
+  if (fileLabel) fileLabel.innerHTML = isGrid
+    ? 'Tag Background <span style="color:var(--text3);font-size:.85em">(PDF, PNG or JPEG — optional)</span>'
+    : 'Template File <span style="color:var(--text3);font-size:.85em">(PDF, PNG or JPEG)</span>';
+}
+
 async function saveNew() {
   const name   = document.getElementById('pt-new-name')?.value.trim();
   const filter = document.getElementById('pt-new-filter')?.value.trim();
+  const mode   = document.getElementById('pt-new-mode')?.value ?? 'page';
   const file   = document.getElementById('pt-new-file')?.files?.[0];
   const btn    = document.getElementById('pt-save-btn');
 
-  if (!name)  { _toast('Enter a template name'); return; }
-  if (!file)  { _toast('Select a file to upload'); return; }
+  if (!name) { _toast('Enter a template name'); return; }
+  if (mode === 'page' && !file) { _toast('Select a template file'); return; }
+  if (mode === 'grid') {
+    const tw = parseFloat(document.getElementById('pt-tag-w')?.value);
+    const th = parseFloat(document.getElementById('pt-tag-h')?.value);
+    if (!tw || !th) { _toast('Enter tag width and height'); return; }
+  }
 
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Uploading…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating…'; }
 
   try {
     const fd = new FormData();
     fd.append('name',        name);
-    fd.append('item_filter', filter);
-    fd.append('file',        file);
+    fd.append('item_filter', filter ?? '');
+    fd.append('layout_mode', mode);
+    if (file) fd.append('file', file);
+
+    if (mode === 'grid') {
+      fd.append('tag_width_mm',   document.getElementById('pt-tag-w')?.value ?? '');
+      fd.append('tag_height_mm',  document.getElementById('pt-tag-h')?.value ?? '');
+      fd.append('page_cols',      document.getElementById('pt-cols')?.value   ?? '2');
+      fd.append('page_rows',      document.getElementById('pt-rows')?.value   ?? '5');
+      fd.append('margin_mm',      document.getElementById('pt-margin')?.value ?? '10');
+      fd.append('gap_mm',         document.getElementById('pt-gap')?.value    ?? '5');
+      fd.append('page_width_mm',  document.getElementById('pt-pg-w')?.value   ?? '');
+      fd.append('page_height_mm', document.getElementById('pt-pg-h')?.value   ?? '');
+    }
 
     const res = await fetch('/api/admin/qr-templates', {
       method:      'POST',
@@ -150,14 +225,14 @@ async function saveNew() {
       body:        fd,
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    if (!res.ok) throw new Error(data.error || 'Creation failed');
 
     _toast('Template created');
     cancelNew();
     await loadList();
   } catch (e) {
     _toast('Error: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = 'Upload'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Create'; }
   }
 }
 
@@ -186,11 +261,20 @@ async function editZones(id) {
   const editorArea = document.getElementById('pt-editor-area');
   editorArea.style.display = '';
 
+  const isGrid   = tmpl.layout_mode === 'grid';
+  const subtitle = isGrid
+    ? `Label grid — ${tmpl.page_cols}×${tmpl.page_rows} per page, tag ${tmpl.tag_width_mm}×${tmpl.tag_height_mm} mm. Zone positions are relative to the top-left of each tag.`
+    : 'Full page — one item per page. Positions are in millimetres from the top-left corner of the page.';
+
+  const previewHtml = tmpl.pdf_filename
+    ? `<iframe src="/api/admin/qr-templates/${id}/preview" class="pt-preview-frame" title="Template preview"></iframe>`
+    : `<div class="empty" style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--text3)">No background file — plain white tag</div>`;
+
   editorArea.innerHTML = `
     <div class="page-header" style="margin-bottom:1rem">
       <div>
         <div class="page-title">${esc(tmpl.name)}</div>
-        <div class="page-subtitle">Define where QR codes and labels appear on the template. Positions are in millimetres from the top-left corner.</div>
+        <div class="page-subtitle">${subtitle}</div>
       </div>
       <div class="btn-group">
         <button class="btn" onclick="window._pt.backToList()">← Back</button>
@@ -199,10 +283,8 @@ async function editZones(id) {
     </div>
     <div class="pt-editor-layout">
       <div class="pt-preview-panel">
-        <div class="pt-preview-label">Template Preview</div>
-        <iframe src="/api/admin/qr-templates/${id}/preview"
-                class="pt-preview-frame"
-                title="Template preview"></iframe>
+        <div class="pt-preview-label">${isGrid ? 'Tag Background Preview' : 'Template Preview'}</div>
+        ${previewHtml}
       </div>
       <div class="pt-zones-panel">
         <div class="pt-zones-header">
@@ -324,6 +406,14 @@ async function generate(id) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function layoutBadge(t) {
+  if (t.layout_mode === 'grid') {
+    return `<span class="badge available">${t.page_cols}×${t.page_rows} grid</span>
+            <span style="color:var(--text3);font-size:.8em;margin-left:.3rem">${t.tag_width_mm}×${t.tag_height_mm} mm</span>`;
+  }
+  return '<span class="badge">Full page</span>';
+}
 
 function zoneLabel(type) {
   return { qr_code: 'QR Code', item_number: 'Item Number', item_name: 'Item Name', custom_text: 'Custom Text' }[type] ?? type;
