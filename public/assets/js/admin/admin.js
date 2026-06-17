@@ -14,7 +14,7 @@ import { initOrders }            from './orders.js?v=1.0.0';
 import { initStorageLocations }  from './storage_locations.js?v=1.0.0';
 import { initPersonTokens }      from './person_tokens.js?v=1.0.0';
 import { initFillRoute }         from './fill_route.js?v=1.0.0';
-import { initPrintTemplates }   from './print_templates.js?v=1.0.2';
+import { initPrintTemplates }   from './print_templates.js?v=1.0.3';
 
 let toastTimer = null;
 let _user      = null;

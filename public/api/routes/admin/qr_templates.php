@@ -345,6 +345,8 @@ function _qrt_fetch_items(?string $filter, ?array $item_ids): array {
     $params = [];
 
     if ($filter) {
+        // Match on category slug OR equipment type name (case-insensitive)
+        $params[] = $filter;
         $params[] = $filter;
         $id_clause = '';
         if ($item_ids) {
@@ -356,7 +358,7 @@ function _qrt_fetch_items(?string $filter, ?array $item_ids): array {
             "SELECT i.id, i.qr_code, i.item_number, t.name AS type_name
              FROM equipment_items i
              JOIN equipment_types t ON t.id = i.equipment_type_id
-             WHERE t.category = ? AND i.status != 'retired' $id_clause
+             WHERE (t.category = ? OR LOWER(t.name) = LOWER(?)) AND i.status != 'retired' $id_clause
              ORDER BY i.item_number"
         );
     } else {

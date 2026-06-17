@@ -111,7 +111,7 @@ function openNew() {
       </div>
       <div class="form-row">
         <label>Item Filter <span style="color:var(--text3);font-size:.85em">(optional — category slug)</span></label>
-        <input type="text" id="pt-new-filter" placeholder="e.g. water_cube — leave blank for all items" autocomplete="off">
+        <input type="text" id="pt-new-filter" placeholder="e.g. Water Cube — matches equipment type name, leave blank for all" autocomplete="off">
       </div>
       <div class="form-row">
         <label>Layout</label>
