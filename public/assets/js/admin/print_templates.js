@@ -267,9 +267,20 @@ async function editZones(id) {
     ? `Label grid — ${tmpl.page_cols}×${tmpl.page_rows} per page, tag ${tmpl.tag_width_mm}×${tmpl.tag_height_mm} mm. Zone positions are relative to the top-left of each tag.`
     : 'Full page — one item per page. Positions are in millimetres from the top-left corner of the page.';
 
-  const previewHtml = tmpl.pdf_filename
-    ? `<iframe src="/api/admin/qr-templates/${id}/preview" class="pt-preview-frame" title="Template preview"></iframe>`
-    : `<div class="empty" style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--text3)">No background file — plain white tag</div>`;
+  // Determine preview — avoid iframes (blocked by server X-Frame-Options).
+  // Images load directly via <img>; PDFs are fetched as a blob to bypass the restriction.
+  const ext = tmpl.pdf_filename?.split('.').pop().toLowerCase();
+  const isImage = ext === 'png' || ext === 'jpg' || ext === 'jpeg';
+  const isPdf   = ext === 'pdf';
+
+  let previewHtml;
+  if (!tmpl.pdf_filename) {
+    previewHtml = `<div class="empty" style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--text3)">No background file — plain white tag</div>`;
+  } else if (isImage) {
+    previewHtml = `<img src="/api/admin/qr-templates/${id}/preview" class="pt-preview-frame" alt="Template preview">`;
+  } else {
+    previewHtml = `<div id="pt-pdf-placeholder" class="pt-preview-frame" style="display:flex;align-items:center;justify-content:center"><span class="spinner"></span></div>`;
+  }
 
   editorArea.innerHTML = `
     <div class="page-header" style="margin-bottom:1rem">
@@ -296,6 +307,8 @@ async function editZones(id) {
       </div>
     </div>`;
 
+  if (isPdf) _loadPdfPreview(id);
+
   try {
     const data = await get(`/admin/qr-templates/${id}/zones`);
     _zones = data.zones || [];
@@ -304,6 +317,22 @@ async function editZones(id) {
     _toast('Error loading zones: ' + e.message);
     _zones = [];
     renderZones();
+  }
+}
+
+async function _loadPdfPreview(id) {
+  const placeholder = document.getElementById('pt-pdf-placeholder');
+  if (!placeholder) return;
+  try {
+    const res = await fetch(`/api/admin/qr-templates/${id}/preview`, { credentials: 'include' });
+    if (!res.ok) throw new Error('Preview unavailable');
+    const blob   = await res.blob();
+    const url    = URL.createObjectURL(blob);
+    placeholder.outerHTML = `<object data="${url}" type="application/pdf" class="pt-preview-frame">
+      <a href="${url}" target="_blank" class="btn sm" style="margin:1rem">Open PDF in new tab</a>
+    </object>`;
+  } catch {
+    placeholder.innerHTML = `<a href="/api/admin/qr-templates/${id}/preview" target="_blank" class="btn sm">Open preview in new tab</a>`;
   }
 }
 
