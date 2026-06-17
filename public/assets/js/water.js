@@ -1,27 +1,9 @@
 import { initLang, t, renderSwitcher, onLangChange } from './i18n.js?v=1.0.0';
 
-// Times/details that need to be filled in — edit these strings directly.
-// Use null to show a styled placeholder instead.
-const INFO = {
-  depositTime:   null,   // e.g. '14:00' — deadline to drop voucher half at NoInfo
-  waterRunTime:  null,   // e.g. '16:00' — when the water run starts
-};
-
 initLang();
 renderSwitcher(document.getElementById('lang-switcher'));
 onLangChange(render);
 render();
-
-function ph(value, fallback) {
-  if (value) return `<strong>${esc(value)}</strong>`;
-  return `<span class="placeholder">${esc(fallback)}</span>`;
-}
-
-function inject(str) {
-  return str
-    .replace('[DEPOSIT_TIME]',   ph(INFO.depositTime,  '[time TBC]'))
-    .replace('[WATER_RUN_TIME]', ph(INFO.waterRunTime, '[time TBC]'));
-}
 
 function esc(s) {
   return String(s)
@@ -45,9 +27,16 @@ function render() {
       <p>${esc(w('pageSubtitle'))}</p>
     </div>
 
-    <!-- How it works -->
+    <!-- How to read the sign -->
     <section class="w-section">
-      <div class="w-section-title">${esc(w('howTitle'))}</div>
+      <div class="w-section-title">${esc(w('readTitle'))}</div>
+      <div class="w-about-card">${esc(w('readDials'))}</div>
+      <div class="w-about-card">${esc(w('readStrips'))}</div>
+    </section>
+
+    <!-- How sanitation works -->
+    <section class="w-section">
+      <div class="w-section-title">${esc(w('processTitle'))}</div>
       <div class="w-steps">
 
         <div class="w-step">
@@ -62,7 +51,7 @@ function render() {
           <div class="w-step-num">2</div>
           <div class="w-step-body">
             <div class="w-step-title">${esc(w('step2Title'))}</div>
-            <div class="w-step-text">${inject(w('step2Body'))}</div>
+            <div class="w-step-text">${esc(w('step2Body'))}</div>
           </div>
         </div>
 
@@ -70,7 +59,7 @@ function render() {
           <div class="w-step-num">3</div>
           <div class="w-step-body">
             <div class="w-step-title">${esc(w('step3Title'))}</div>
-            <div class="w-step-text">${inject(w('step3Body'))}</div>
+            <div class="w-step-text">${esc(w('step3Body'))}</div>
           </div>
         </div>
 
@@ -93,20 +82,11 @@ function render() {
       </div>
     </section>
 
-    <!-- About the dual voucher -->
+    <!-- Testing -->
     <section class="w-section">
-      <div class="w-section-title">${esc(w('aboutTitle'))}</div>
-      <div class="w-about-card">${inject(w('aboutBody'))}</div>
-      <div class="w-deposit-note">${inject(w('depositNote'))}</div>
-    </section>
-
-    <!-- Check voucher CTA -->
-    <section class="w-section">
-      <div class="w-cta">
-        <div class="w-cta-title">${esc(w('checkTitle'))}</div>
-        <div class="w-cta-body">${esc(w('checkBody'))}</div>
-        <a href="/voucher" class="btn primary">${esc(c('checkVoucher'))}</a>
-      </div>
+      <div class="w-section-title">${esc(w('testingTitle'))}</div>
+      <div class="w-about-card">${esc(w('testingBody'))}</div>
+      <div class="w-deposit-note">${esc(w('testingNoChlorine'))}</div>
     </section>
 
     <p class="w-footer-note">${esc(c('questions'))}</p>
