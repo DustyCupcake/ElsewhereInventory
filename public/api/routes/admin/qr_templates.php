@@ -323,6 +323,7 @@ function handle_qrt_generate(): void {
     $has_qrlib = class_exists('QRcode');
 
     require_once __DIR__ . '/../../../assets/vendor/fpdf/fpdf.php';
+    if (!defined('FPDF_VERSION')) define('FPDF_VERSION', FPDF::VERSION);
     require_once __DIR__ . '/../../../assets/vendor/fpdi/fpdi.php';
 
     $tmpl_file = $tmpl['pdf_filename'] ? _qrt_storage_dir() . $tmpl['pdf_filename'] : null;

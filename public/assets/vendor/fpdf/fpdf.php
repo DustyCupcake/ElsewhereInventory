@@ -1512,7 +1512,7 @@ protected function _out($s)
 	elseif($this->state==0)
 		$this->Error('No page has been added yet');
 	elseif($this->state==1)
-		$this->Error('Invalid call');
+		$this->buffer .= $s."\n"; // FPDI 1.6.2 compatibility: write to buffer between pages
 	elseif($this->state==3)
 		$this->Error('The document is closed');
 }
