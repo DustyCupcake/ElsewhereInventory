@@ -232,22 +232,31 @@ function handle_qrt_generate(): void {
     $tmpl_file = $tmpl['pdf_filename'] ? _qrt_storage_dir() . $tmpl['pdf_filename'] : null;
     $ext       = $tmpl_file ? strtolower(pathinfo($tmpl_file, PATHINFO_EXTENSION)) : null;
 
-    $pdf = new FPDI();
-    $pdf->SetAutoPageBreak(false);
-    $pdf->SetMargins(0, 0, 0);
+    // Buffer any PHP notices/warnings so they don't corrupt the PDF or JSON response
+    ob_start();
+    try {
+        $pdf = new FPDI();
+        $pdf->SetAutoPageBreak(false);
+        $pdf->SetMargins(0, 0, 0);
 
-    if ($tmpl['layout_mode'] === 'grid') {
-        _qrt_generate_grid($pdf, $tmpl, $zones, $items, $tmpl_file, $ext, $base_url, $has_qrlib);
-    } else {
-        _qrt_generate_page($pdf, $tmpl, $zones, $items, $tmpl_file, $ext, $base_url, $has_qrlib);
+        if ($tmpl['layout_mode'] === 'grid') {
+            _qrt_generate_grid($pdf, $tmpl, $zones, $items, $tmpl_file, $ext, $base_url, $has_qrlib);
+        } else {
+            _qrt_generate_page($pdf, $tmpl, $zones, $items, $tmpl_file, $ext, $base_url, $has_qrlib);
+        }
+
+        $output    = $pdf->Output('S');
+        $safe_name = preg_replace('/[^a-z0-9_-]/i', '_', $tmpl['name']);
+        ob_end_clean();
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $safe_name . '_labels.pdf"');
+        header('Cache-Control: no-store');
+        echo $output;
+        exit;
+    } catch (Throwable $e) {
+        ob_end_clean();
+        json_error('PDF generation failed: ' . $e->getMessage(), 500);
     }
-
-    $safe_name = preg_replace('/[^a-z0-9_-]/i', '_', $tmpl['name']);
-    header('Content-Type: application/pdf');
-    header('Content-Disposition: attachment; filename="' . $safe_name . '_labels.pdf"');
-    header('Cache-Control: no-store');
-    echo $pdf->Output('S');
-    exit;
 }
 
 // ─── Generation modes ─────────────────────────────────────────────────────────
