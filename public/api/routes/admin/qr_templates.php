@@ -517,7 +517,7 @@ function _qrt_draw_zone(FPDI $pdf, array $zone, array $item, string $base_url,
             $line_h = $fs * 0.352778 * 1.5;
             $pdf->SetFont('Helvetica', 'B', $fs);
             $pdf->SetXY($x, $y);
-            $pdf->Cell($size, $line_h, '#' . $item['item_number'], 0, 0, 'C');
+            $pdf->Cell($size, $line_h, $item['qr_code'], 0, 0, 'C');
             break;
 
         case 'item_name':
