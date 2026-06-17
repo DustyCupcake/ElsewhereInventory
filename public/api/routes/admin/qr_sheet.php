@@ -82,6 +82,9 @@ function handle_qr_sheet(): void {
         }
     }
 
+    // Re-assert text/html — QRcode::png() sets Content-Type: image/png internally
+    header('Content-Type: text/html; charset=utf-8');
+
     echo '<!DOCTYPE html>
 <html lang="en">
 <head>
