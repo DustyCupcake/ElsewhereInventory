@@ -253,8 +253,9 @@ async function deleteTemplate(id, name) {
 
 async function editZones(id) {
   _editId = id;
-  const tmpl = _templates.find(t => t.id === id);
-  if (!tmpl) return;
+  // eslint-disable-next-line eqeqeq — PDO may return id as string or number
+  const tmpl = _templates.find(t => t.id == id);
+  if (!tmpl) { _toast('Template not found'); return; }
 
   document.getElementById('pt-list-area').style.display   = 'none';
   document.getElementById('pt-new-form').style.display    = 'none';
@@ -376,8 +377,9 @@ async function saveZones() {
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
 async function generate(id) {
-  const tmpl = _templates.find(t => t.id === id);
-  if (!tmpl) return;
+  // eslint-disable-next-line eqeqeq — PDO may return id as string or number
+  const tmpl = _templates.find(t => t.id == id);
+  if (!tmpl) { _toast('Template not found'); return; }
 
   try {
     const res = await fetch(`/api/admin/qr-templates/${id}/generate`, {
