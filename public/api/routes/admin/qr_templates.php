@@ -111,6 +111,102 @@ function handle_qrt_delete(): void {
     json_ok(['deleted' => true]);
 }
 
+// POST /admin/qr-templates/:id/replace-file  — swap background without touching zones
+function handle_qrt_replace_file(): void {
+    require_method('POST');
+    require_permission('manage_equipment');
+    verify_csrf();
+
+    $id   = (int)($_GET['id'] ?? 0);
+    $tmpl = _qrt_load_template($id);
+
+    if (empty($_FILES['file']['tmp_name'])) json_error('No file uploaded', 422);
+
+    $file    = $_FILES['file'];
+    $allowed = ['application/pdf', 'image/png', 'image/jpeg'];
+    $mime    = mime_content_type($file['tmp_name']);
+    if (!in_array($mime, $allowed, true)) json_error('File must be PDF, PNG, or JPEG', 422);
+
+    $ext      = ['application/pdf' => 'pdf', 'image/png' => 'png', 'image/jpeg' => 'jpg'][$mime];
+    $filename = bin2hex(random_bytes(16)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], _qrt_storage_dir() . $filename)) {
+        json_error('Failed to save file', 500);
+    }
+
+    if ($tmpl['pdf_filename']) {
+        $old = _qrt_storage_dir() . $tmpl['pdf_filename'];
+        if (file_exists($old)) @unlink($old);
+    }
+
+    $stmt = db()->prepare('UPDATE qr_templates SET pdf_filename = ? WHERE id = ?');
+    $stmt->execute([$filename, $id]);
+
+    json_ok(['pdf_filename' => $filename]);
+}
+
+// POST /admin/qr-templates/:id/duplicate  — copy template + zones + file
+function handle_qrt_duplicate(): void {
+    require_method('POST');
+    require_permission('manage_equipment');
+    verify_csrf();
+
+    $id   = (int)($_GET['id'] ?? 0);
+    $tmpl = _qrt_load_template($id);
+
+    $new_filename = null;
+    if ($tmpl['pdf_filename']) {
+        $src = _qrt_storage_dir() . $tmpl['pdf_filename'];
+        if (file_exists($src)) {
+            $ext          = pathinfo($tmpl['pdf_filename'], PATHINFO_EXTENSION);
+            $new_filename = bin2hex(random_bytes(16)) . '.' . $ext;
+            copy($src, _qrt_storage_dir() . $new_filename);
+        }
+    }
+
+    $ins = db()->prepare(
+        'INSERT INTO qr_templates
+             (name, pdf_filename, item_filter, layout_mode,
+              tag_width_mm, tag_height_mm, page_cols, page_rows,
+              margin_mm, gap_mm, page_width_mm, page_height_mm)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $ins->execute([
+        $tmpl['name'] . ' Copy',
+        $new_filename,
+        $tmpl['item_filter'],
+        $tmpl['layout_mode'],
+        $tmpl['tag_width_mm'],
+        $tmpl['tag_height_mm'],
+        $tmpl['page_cols'],
+        $tmpl['page_rows'],
+        $tmpl['margin_mm'],
+        $tmpl['gap_mm'],
+        $tmpl['page_width_mm'],
+        $tmpl['page_height_mm'],
+    ]);
+    $new_id = (int)db()->lastInsertId();
+
+    $zstmt = db()->prepare(
+        'SELECT zone_type, page, x_mm, y_mm, size_mm, custom_value, font_size
+         FROM qr_template_zones WHERE template_id = ? ORDER BY page, id'
+    );
+    $zstmt->execute([$id]);
+    $zone_ins = db()->prepare(
+        'INSERT INTO qr_template_zones
+             (template_id, zone_type, page, x_mm, y_mm, size_mm, custom_value, font_size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    foreach ($zstmt->fetchAll() as $z) {
+        $zone_ins->execute([
+            $new_id, $z['zone_type'], $z['page'],
+            $z['x_mm'], $z['y_mm'], $z['size_mm'],
+            $z['custom_value'], $z['font_size'],
+        ]);
+    }
+
+    json_ok(['id' => $new_id, 'name' => $tmpl['name'] . ' Copy'], 201);
+}
+
 // GET /admin/qr-templates/:id/preview  — serves the raw PDF/image file
 function handle_qrt_preview(): void {
     require_method('GET');

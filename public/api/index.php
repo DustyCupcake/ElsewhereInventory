@@ -208,13 +208,15 @@ $routes = [
     ['DELETE', '/admin/borrow-rules/:id',           'routes/admin/borrow_rules.php',  'handle_delete_borrow_rule'],
 
     // Admin — QR print templates
-    ['GET',    '/admin/qr-templates',                    'routes/admin/qr_templates.php', 'handle_qrt_list'],
-    ['POST',   '/admin/qr-templates',                    'routes/admin/qr_templates.php', 'handle_qrt_create'],
-    ['DELETE', '/admin/qr-templates/:id',                'routes/admin/qr_templates.php', 'handle_qrt_delete'],
-    ['GET',    '/admin/qr-templates/:id/preview',        'routes/admin/qr_templates.php', 'handle_qrt_preview'],
-    ['GET',    '/admin/qr-templates/:id/zones',          'routes/admin/qr_templates.php', 'handle_qrt_get_zones'],
-    ['PUT',    '/admin/qr-templates/:id/zones',          'routes/admin/qr_templates.php', 'handle_qrt_save_zones'],
-    ['POST',   '/admin/qr-templates/:id/generate',       'routes/admin/qr_templates.php', 'handle_qrt_generate'],
+    ['GET',    '/admin/qr-templates',                        'routes/admin/qr_templates.php', 'handle_qrt_list'],
+    ['POST',   '/admin/qr-templates',                        'routes/admin/qr_templates.php', 'handle_qrt_create'],
+    ['DELETE', '/admin/qr-templates/:id',                    'routes/admin/qr_templates.php', 'handle_qrt_delete'],
+    ['GET',    '/admin/qr-templates/:id/preview',            'routes/admin/qr_templates.php', 'handle_qrt_preview'],
+    ['GET',    '/admin/qr-templates/:id/zones',              'routes/admin/qr_templates.php', 'handle_qrt_get_zones'],
+    ['PUT',    '/admin/qr-templates/:id/zones',              'routes/admin/qr_templates.php', 'handle_qrt_save_zones'],
+    ['POST',   '/admin/qr-templates/:id/generate',           'routes/admin/qr_templates.php', 'handle_qrt_generate'],
+    ['POST',   '/admin/qr-templates/:id/replace-file',       'routes/admin/qr_templates.php', 'handle_qrt_replace_file'],
+    ['POST',   '/admin/qr-templates/:id/duplicate',          'routes/admin/qr_templates.php', 'handle_qrt_duplicate'],
 
     // Admin — users
     ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],
