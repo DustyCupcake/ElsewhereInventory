@@ -43,6 +43,11 @@ if (!qr) {
   ]).then(([lookup, user]) => {
     const perms = user?.permissions ?? [];
 
+    if (lookup.type === 'item' && lookup.category === 'water_cube') {
+      window.location.replace('/cube.html?qr=' + encodeURIComponent(qr));
+      return;
+    }
+
     renderScanResult(container, lookup, perms, (action, data) => {
       switch (action) {
         case 'login':
