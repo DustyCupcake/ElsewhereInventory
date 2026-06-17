@@ -20,6 +20,7 @@ export async function initPrintTemplates(container, toast) {
     editZones, backToList,
     addZone, removeZone, saveZones,
     generate, del: deleteTemplate,
+    duplicate, replaceFile,
     _toggleGridFields,
     _zoneChange(idx, field, value) {
       if (_zones[idx]) {
@@ -87,6 +88,7 @@ function renderList(wrap) {
             <td style="color:var(--text2);font-size:.85em">${fmtDate(t.created_at)}</td>
             <td class="table-actions">
               <button class="btn sm" onclick="window._pt.editZones(${t.id})">Edit Zones</button>
+              <button class="btn sm" onclick="window._pt.duplicate(${t.id})">Duplicate</button>
               <button class="btn sm primary" onclick="window._pt.generate(${t.id})">Generate PDF</button>
               <button class="btn sm danger" onclick="window._pt.del(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Delete</button>
             </td>
@@ -290,6 +292,7 @@ async function editZones(id) {
       </div>
       <div class="btn-group">
         <button class="btn" onclick="window._pt.backToList()">← Back</button>
+        <button class="btn sm" onclick="window._pt.replaceFile(${id})">Replace Background…</button>
         <button class="btn primary" onclick="window._pt.saveZones()">Save Zones</button>
       </div>
     </div>
@@ -318,6 +321,44 @@ async function editZones(id) {
     _zones = [];
     renderZones();
   }
+}
+
+async function duplicate(id) {
+  try {
+    const data = await post(`/admin/qr-templates/${id}/duplicate`, {});
+    _toast(`Duplicated as "${data.name}"`);
+    await loadList();
+  } catch (e) {
+    _toast('Error: ' + e.message);
+  }
+}
+
+function replaceFile(id) {
+  const input = document.createElement('input');
+  input.type   = 'file';
+  input.accept = '.pdf,.png,.jpg,.jpeg';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res  = await fetch(`/api/admin/qr-templates/${id}/replace-file`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'X-CSRF-Token': getCsrf() },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Replace failed');
+      const t = _templates.find(t => t.id == id);
+      if (t) t.pdf_filename = data.pdf_filename;
+      _toast('Background replaced — reloading preview…');
+      await editZones(id);
+    } catch (e) {
+      _toast('Error: ' + e.message);
+    }
+  };
+  input.click();
 }
 
 async function _loadPdfPreview(id) {
