@@ -231,6 +231,17 @@ label { display: block; font-size: 12px; color: var(--text2); margin-bottom: .25
 .lang-btn.active { background: var(--accent); color: #1a1a18; border-color: transparent; }
 .side-menu-lang { padding: 8px 16px; }
 
+/* ── Back-to-app nav link (shared across public pages) ──────────────────── */
+.page-back {
+  font-size: 14px;
+  color: var(--text2);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+.page-back:hover { background: var(--surface2); }
+
 /* ── Placeholder text (unset times / info) ──────────────────────────────── */
 .placeholder {
   display: inline-block;
