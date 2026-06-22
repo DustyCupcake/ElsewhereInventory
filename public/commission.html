@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Commission Items</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#2a5f3f">
+<link rel="stylesheet" href="/assets/css/main.css?v=1.0.2">
+<style>
+  body { min-height:100vh; padding:1rem; max-width:520px; margin:0 auto; }
+  .logo { text-align:center; font-size:20px; font-weight:700; margin-bottom:1.25rem; color:var(--text1); }
+  .logo span { color:var(--accent); }
+  .step-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text3); margin-bottom:.25rem; }
+  .step-title { font-size:18px; font-weight:600; margin-bottom:1rem; }
+  .item-badge { background:var(--surface2); border-radius:var(--radius); padding:.6rem .9rem;
+                margin-bottom:1rem; font-size:13px; }
+  .item-badge strong { display:block; font-size:15px; font-weight:600; margin-bottom:.15rem; }
+  .item-badge .qr  { font-family:monospace; font-size:11px; color:var(--text3); }
+
+  .video-wrap { position:relative; width:100%; border-radius:var(--radius); overflow:hidden;
+                background:#000; aspect-ratio:4/3; margin-bottom:.75rem; }
+  video { width:100%; height:100%; object-fit:cover; display:block; }
+  .scan-overlay { position:absolute; inset:0; pointer-events:none;
+                  display:flex; align-items:center; justify-content:center; }
+  .scan-box { width:55%; aspect-ratio:1; border:2px solid var(--accent);
+              border-radius:8px; box-shadow:0 0 0 999px rgba(0,0,0,.4); }
+
+  .photo-preview { width:100%; border-radius:var(--radius); max-height:220px;
+                   object-fit:cover; margin-bottom:.75rem; border:1px solid var(--border); display:none; }
+  .photo-placeholder { width:100%; height:160px; border-radius:var(--radius); background:var(--surface2);
+                       display:flex; align-items:center; justify-content:center;
+                       color:var(--text3); font-size:13px; margin-bottom:.75rem; border:1px dashed var(--border); }
+
+  .spec-grid { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.75rem; }
+  .spec-grid .field { margin:0; min-width:120px; flex:1; }
+
+  .status-msg { text-align:center; padding:1.5rem 0; }
+  .status-icon { font-size:2.5rem; margin-bottom:.5rem; }
+  .status-text { font-size:14px; color:var(--text2); line-height:1.5; }
+
+  [data-step] { display:none; }
+  [data-step].active { display:block; }
+
+  .step-actions { display:flex; gap:.5rem; margin-top:1rem; }
+  .step-actions .btn { flex:1; }
+
+  .commissioned-badge { display:inline-block; font-size:10px; padding:.1rem .4rem;
+    border-radius:3px; background:var(--accent); color:#fff; margin-left:.35rem; vertical-align:middle; }
+</style>
+</head>
+<body>
+<div class="logo">ELSE<span>WHERE</span> <span style="font-size:13px;font-weight:400;color:var(--text3)">Commission</span></div>
+
+<!-- Auth check -->
+<div data-step="loading" class="active">
+  <div class="status-msg">
+    <div class="status-icon">⏳</div>
+    <div class="status-text">Checking session…</div>
+  </div>
+</div>
+
+<div data-step="no-access">
+  <div class="status-msg">
+    <div class="status-icon" style="color:var(--danger)">✕</div>
+    <div class="status-text">You need the <strong>manage_equipment</strong> permission to commission items.<br>
+      <a href="/" style="color:var(--accent)">Return to app</a></div>
+  </div>
+</div>
+
+<div data-step="scan" class="card">
+  <div class="step-label">Step 1 of 4</div>
+  <div class="step-title">Scan item QR</div>
+  <div class="video-wrap">
+    <video id="cam-video" autoplay playsinline muted></video>
+    <div class="scan-overlay"><div class="scan-box"></div></div>
+  </div>
+  <div id="scan-msg" style="font-size:13px;color:var(--text3);text-align:center;margin-bottom:.5rem">Point camera at item QR code</div>
+  <div style="text-align:center">
+    <a href="/" style="font-size:13px;color:var(--text3)">← Back to app</a>
+  </div>
+</div>
+
+<div data-step="photo" class="card">
+  <div class="step-label">Step 2 of 4</div>
+  <div class="step-title">Photo</div>
+  <div id="item-badge-photo" class="item-badge"></div>
+  <div id="photo-placeholder" class="photo-placeholder">No photo yet</div>
+  <img id="photo-preview" class="photo-preview" alt="Item photo">
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+    <label class="btn sm" style="cursor:pointer;flex:1">
+      📷 Take / choose photo
+      <input type="file" accept="image/*" capture="environment" id="photo-file" style="display:none" onchange="handlePhotoFile(this)">
+    </label>
+  </div>
+  <div class="step-actions">
+    <button class="btn sm" onclick="goStep('scan')">← Rescan</button>
+    <button class="btn primary" onclick="uploadPhotoAndNext()">Next →</button>
+    <button class="btn sm" onclick="goStep('specs')">Skip photo</button>
+  </div>
+</div>
+
+<div data-step="specs" class="card">
+  <div class="step-label">Step 3 of 4</div>
+  <div class="step-title">Specs</div>
+  <div id="item-badge-specs" class="item-badge"></div>
+  <div id="spec-fields-form"></div>
+  <div class="step-actions">
+    <button class="btn sm" onclick="goStep('photo')">← Back</button>
+    <button class="btn primary" onclick="goStep('location')">Next →</button>
+  </div>
+</div>
+
+<div data-step="location" class="card">
+  <div class="step-label">Step 4 of 4</div>
+  <div class="step-title">Location <span style="font-size:13px;font-weight:400;color:var(--text3)">(optional)</span></div>
+  <div id="item-badge-location" class="item-badge"></div>
+  <div class="field">
+    <label>Home location <span style="font-size:11px;color:var(--text3)">(where item lives when not in use)</span></label>
+    <select id="loc-home">
+      <option value="">— None / inherit from type —</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Current location <span style="font-size:11px;color:var(--text3)">(where it is right now)</span></label>
+    <select id="loc-current">
+      <option value="">— Not set —</option>
+    </select>
+  </div>
+  <div class="step-actions">
+    <button class="btn sm" onclick="goStep('specs')">← Back</button>
+    <button class="btn primary" onclick="saveAndNext()">Save & scan next →</button>
+  </div>
+</div>
+
+<div data-step="saved" class="card">
+  <div class="status-msg">
+    <div class="status-icon" style="color:var(--accent)">✓</div>
+    <div class="status-text" id="saved-msg">Item commissioned!</div>
+  </div>
+</div>
+
+<script>
+let _csrf       = null;
+let _item       = null;   // current lookup result
+let _locations  = [];
+let _photoPath  = null;   // uploaded photo path
+let _scanner    = null;   // { stream, raf, canvas, ctx }
+
+// ── Utilities ───────────────────────────────────────────────────────────────
+
+function showStep(name) {
+  document.querySelectorAll('[data-step]').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector(`[data-step="${name}"]`);
+  if (el) el.classList.add('active');
+}
+
+function goStep(name) {
+  stopCamera();
+  if (name === 'scan') startScan();
+  else showStep(name);
+}
+
+async function apiFetch(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (_csrf && method !== 'GET') headers['X-CSRF-Token'] = _csrf;
+  const resp = await fetch('/api' + path, {
+    method,
+    headers,
+    credentials: 'include',
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  return data;
+}
+
+function itemBadgeHtml(item) {
+  const commissioned = (item.spec_values && Object.keys(item.spec_values).length)
+    ? '<span class="commissioned-badge">has specs</span>' : '';
+  const photoTag = item.photo ? '<span class="commissioned-badge" style="background:var(--text3)">photo</span>' : '';
+  return `<strong>${item.name}${commissioned}${photoTag}</strong>
+    <span class="qr">${item.qr_code}</span>
+    <span style="font-size:11px;color:var(--text3)">${item.category || ''}</span>`;
+}
+
+function toast(msg) {
+  let el = document.getElementById('_toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_toast';
+    el.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);' +
+      'background:var(--text1);color:var(--bg);padding:.5rem 1rem;border-radius:var(--radius);' +
+      'font-size:13px;z-index:9999;pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._tid);
+  el._tid = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// ── Camera / QR scanning ────────────────────────────────────────────────────
+
+async function startScan() {
+  showStep('scan');
+  const video = document.getElementById('cam-video');
+  const msg   = document.getElementById('scan-msg');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    const canvas = document.createElement('canvas');
+    const ctx    = canvas.getContext('2d', { willReadFrequently: true });
+
+    let useNative = false;
+    let detector  = null;
+    if (typeof BarcodeDetector !== 'undefined') {
+      try {
+        detector  = new BarcodeDetector({ formats: ['qr_code'] });
+        useNative = true;
+      } catch {}
+    }
+
+    let jsqr = null;
+    if (!useNative) {
+      // Load jsQR fallback
+      try {
+        const mod = await import('/assets/vendor/jsqr.min.js');
+        jsqr = mod.default || window.jsQR;
+      } catch {
+        jsqr = window.jsQR;
+      }
+    }
+
+    let rafId;
+    let lastScan = 0;
+    async function loop() {
+      rafId = requestAnimationFrame(loop);
+      const now = performance.now();
+      if (now - lastScan < 250) return;
+      if (video.readyState < 2) return;
+      lastScan = now;
+
+      canvas.width  = video.videoWidth  || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      let qrValue = null;
+      try {
+        if (useNative) {
+          const codes = await detector.detect(canvas);
+          if (codes.length) qrValue = codes[0].rawValue;
+        } else if (jsqr) {
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const result  = jsqr(imgData.data, canvas.width, canvas.height);
+          if (result) qrValue = result.data;
+        }
+      } catch {}
+
+      if (qrValue) {
+        cancelAnimationFrame(rafId);
+        stream.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+        _scanner = null;
+        onQrDetected(qrValue);
+      }
+    }
+
+    _scanner = { stream, rafId: null, stop() {
+      cancelAnimationFrame(this._raf);
+      stream.getTracks().forEach(t => t.stop());
+      video.srcObject = null;
+    }};
+    loop();
+    msg.textContent = 'Point camera at item QR code';
+  } catch (err) {
+    msg.textContent = 'Camera unavailable: ' + err.message;
+  }
+}
+
+function stopCamera() {
+  if (_scanner) { _scanner.stop(); _scanner = null; }
+  const video = document.getElementById('cam-video');
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+}
+
+async function onQrDetected(qr) {
+  const msg = document.getElementById('scan-msg');
+  if (msg) msg.textContent = 'Looking up item…';
+  try {
+    const data = await apiFetch('GET', `/items/lookup?qr=${encodeURIComponent(qr)}`);
+    _item = data;
+    _photoPath = data.photo || null;
+    showItemSteps();
+  } catch (e) {
+    toast('Item not found: ' + e.message);
+    setTimeout(() => startScan(), 1500);
+  }
+}
+
+function showItemSteps() {
+  // Populate badges
+  const badge = itemBadgeHtml(_item);
+  document.getElementById('item-badge-photo').innerHTML    = badge;
+  document.getElementById('item-badge-specs').innerHTML    = badge;
+  document.getElementById('item-badge-location').innerHTML = badge;
+
+  // Photo step
+  const preview = document.getElementById('photo-preview');
+  const placeholder = document.getElementById('photo-placeholder');
+  if (_item.photo) {
+    preview.src   = '/' + _item.photo;
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+  } else {
+    preview.style.display = 'none';
+    placeholder.style.display = 'flex';
+  }
+  document.getElementById('photo-file').value = '';
+
+  // Specs step
+  renderSpecForm();
+
+  // Location step
+  renderLocationForm();
+
+  showStep('photo');
+}
+
+// ── Photo ───────────────────────────────────────────────────────────────────
+
+function handlePhotoFile(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const preview = document.getElementById('photo-preview');
+  const placeholder = document.getElementById('photo-placeholder');
+  preview.src   = url;
+  preview.style.display = 'block';
+  placeholder.style.display = 'none';
+}
+
+async function uploadPhotoAndNext() {
+  const file = document.getElementById('photo-file').files?.[0];
+  if (!file) { goStep('specs'); return; }
+
+  toast('Uploading photo…');
+  try {
+    const fd = new FormData();
+    fd.append('photo', file);
+    const resp = await fetch(`/api/items/${_item.id}/photo`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': _csrf },
+      credentials: 'include',
+      body: fd,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Upload failed');
+    _photoPath = data.photo;
+    toast('Photo saved');
+  } catch (e) {
+    toast('Photo error: ' + e.message + ' — continuing');
+  }
+  goStep('specs');
+}
+
+// ── Specs ───────────────────────────────────────────────────────────────────
+
+function renderSpecForm() {
+  const container = document.getElementById('spec-fields-form');
+  const fields = _item.spec_fields || [];
+  const sv     = _item.spec_values || {};
+
+  if (!fields.length) {
+    container.innerHTML = '<div style="font-size:13px;color:var(--text3);padding:.5rem 0">No spec fields defined for this type.</div>';
+    return;
+  }
+
+  const inputs = fields.map(f => {
+    const val = sv[f.field_key] ?? '';
+    let input;
+    if (f.field_type === 'boolean') {
+      input = `<input type="checkbox" id="sf-${esc(f.field_key)}" ${val ? 'checked' : ''} style="width:auto;margin-top:.4rem">`;
+    } else if (f.field_type === 'select') {
+      const opts = (f.options || []).map(o => `<option value="${esc(o)}" ${val === o ? 'selected':''}>${esc(o)}</option>`).join('');
+      input = `<select id="sf-${esc(f.field_key)}" style="margin:0"><option value="">—</option>${opts}</select>`;
+    } else if (f.field_type === 'number') {
+      input = `<input type="number" id="sf-${esc(f.field_key)}" value="${esc(val)}" step="any"${f.unit?' placeholder="'+esc(f.unit)+'"':''}>`;
+    } else {
+      input = `<input type="text" id="sf-${esc(f.field_key)}" value="${esc(val)}" maxlength="255">`;
+    }
+    const unit = f.unit ? ` <span style="font-size:11px;color:var(--text3)">${esc(f.unit)}</span>` : '';
+    return `<div class="field" style="margin:0;min-width:120px;flex:1"><label>${esc(f.label)}${unit}</label>${input}</div>`;
+  }).join('');
+
+  container.innerHTML = `<div class="spec-grid">${inputs}</div>`;
+}
+
+function collectSpecValues() {
+  const fields = _item.spec_fields || [];
+  const sv = {};
+  for (const f of fields) {
+    const el = document.getElementById('sf-' + f.field_key);
+    if (!el) continue;
+    if (f.field_type === 'boolean') sv[f.field_key] = el.checked;
+    else if (f.field_type === 'number') sv[f.field_key] = el.value !== '' ? parseFloat(el.value) : null;
+    else sv[f.field_key] = el.value !== '' ? el.value : null;
+  }
+  return sv;
+}
+
+// ── Location ─────────────────────────────────────────────────────────────────
+
+function renderLocationForm() {
+  const homeEl    = document.getElementById('loc-home');
+  const currentEl = document.getElementById('loc-current');
+
+  const opts = _locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  const homeDefault = _item.home_location?.id || '';
+  homeEl.innerHTML    = `<option value="">— None / inherit from type —</option>${opts}`;
+  currentEl.innerHTML = `<option value="">— Not set —</option>${opts}`;
+  if (homeDefault) homeEl.value = homeDefault;
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+
+async function saveAndNext() {
+  const spec_values       = collectSpecValues();
+  const home_location_id  = document.getElementById('loc-home').value    || null;
+  const current_location_id = document.getElementById('loc-current').value || null;
+
+  const payload = {
+    id:         _item.id,
+    spec_values,
+    home_location_id:    home_location_id    ? +home_location_id    : null,
+    current_location_id: current_location_id ? +current_location_id : null,
+  };
+
+  try {
+    await apiFetch('PUT', '/admin/items', payload);
+    const msg = document.getElementById('saved-msg');
+    if (msg) msg.textContent = `${_item.name} commissioned! Scan next item…`;
+    showStep('saved');
+    setTimeout(() => startScan(), 1400);
+  } catch (e) {
+    toast('Save error: ' + e.message);
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+(async () => {
+  try {
+    const me = await apiFetch('GET', '/auth/me');
+    if (!me.permissions?.includes('manage_equipment')) {
+      showStep('no-access');
+      return;
+    }
+    _csrf = me.csrf_token;
+
+    // Load locations
+    try {
+      const ldata = await apiFetch('GET', '/admin/storage-locations');
+      _locations = ldata.locations || [];
+    } catch { _locations = []; }
+
+    await startScan();
+  } catch (e) {
+    window.location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
+  }
+})();
+</script>
+</body>
+</html>

@@ -248,6 +248,8 @@ CREATE TABLE IF NOT EXISTS equipment_items (
     route_position       SMALLINT UNSIGNED NULL,
     latitude             DECIMAL(10,7)     NULL,
     longitude            DECIMAL(10,7)     NULL,
+    spec_values          TEXT              NULL     COMMENT 'JSON map of field_key -> value',
+    photo                VARCHAR(255)      NULL     COMMENT 'Relative path to item photo',
     created_at           DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_qr          (qr_code),
@@ -264,6 +266,23 @@ CREATE TABLE IF NOT EXISTS equipment_items (
     CONSTRAINT fk_item_person     FOREIGN KEY (current_person_id)   REFERENCES users(id)             ON DELETE SET NULL,
     CONSTRAINT fk_item_cur_loc    FOREIGN KEY (current_location_id) REFERENCES storage_locations(id) ON DELETE SET NULL,
     CONSTRAINT fk_item_home_loc   FOREIGN KEY (home_location_id)    REFERENCES storage_locations(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ─── Equipment type spec fields ───────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS equipment_type_spec_fields (
+    id                INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    equipment_type_id INT UNSIGNED  NOT NULL,
+    field_key         VARCHAR(64)   NOT NULL,
+    label             VARCHAR(128)  NOT NULL,
+    field_type        ENUM('number','text','boolean','select') NOT NULL DEFAULT 'text',
+    unit              VARCHAR(32)   NULL,
+    options           TEXT          NULL,
+    sort_order        SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_type_key (equipment_type_id, field_key),
+    KEY idx_sf_type (equipment_type_id),
+    CONSTRAINT fk_sf_type FOREIGN KEY (equipment_type_id)
+        REFERENCES equipment_types(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Barrio equipment orders ──────────────────────────────────────────────────

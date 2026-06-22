@@ -57,6 +57,7 @@ $routes = [
     // Staff — inventory & equipment ops
     ['GET',  '/camps',               'routes/camps.php',        'handle_camps'],
     ['GET',  '/items/lookup',        'routes/items.php',        'handle_lookup'],
+    ['POST', '/items/:id/photo',     'routes/items.php',        'handle_upload_item_photo'],
     ['GET',  '/inventory',           'routes/items.php',        'handle_inventory'],
     ['POST', '/checkout',            'routes/transactions.php', 'handle_checkout'],
     ['POST', '/sub-checkout',        'routes/transactions.php', 'handle_sub_checkout'],
@@ -165,10 +166,15 @@ $routes = [
     ['DELETE', '/admin/invite-tokens',           'routes/admin/invite.php',      'handle_revoke_invite'],
 
     // Admin — equipment types & items
-    ['GET',    '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_list_types'],
-    ['POST',   '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_create_type'],
-    ['PUT',    '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_update_type'],
-    ['DELETE', '/admin/equipment-types',         'routes/admin/equipment.php',   'handle_delete_type'],
+    ['GET',    '/admin/equipment-types',                                  'routes/admin/equipment.php',   'handle_list_types'],
+    ['POST',   '/admin/equipment-types',                                  'routes/admin/equipment.php',   'handle_create_type'],
+    ['PUT',    '/admin/equipment-types',                                  'routes/admin/equipment.php',   'handle_update_type'],
+    ['DELETE', '/admin/equipment-types',                                  'routes/admin/equipment.php',   'handle_delete_type'],
+    ['PUT',    '/admin/equipment-types/:id/spec-fields/reorder',          'routes/admin/equipment.php',   'handle_reorder_spec_fields'],
+    ['GET',    '/admin/equipment-types/:id/spec-fields',                  'routes/admin/equipment.php',   'handle_list_spec_fields'],
+    ['POST',   '/admin/equipment-types/:id/spec-fields',                  'routes/admin/equipment.php',   'handle_create_spec_field'],
+    ['PUT',    '/admin/spec-fields/:id',                                  'routes/admin/equipment.php',   'handle_update_spec_field'],
+    ['DELETE', '/admin/spec-fields/:id',                                  'routes/admin/equipment.php',   'handle_delete_spec_field'],
     ['GET',    '/admin/items',                   'routes/admin/equipment.php',   'handle_list_items'],
     ['POST',   '/admin/items',                   'routes/admin/equipment.php',   'handle_create_items'],
     ['POST',   '/admin/items/bulk-update',       'routes/admin/equipment.php',   'handle_bulk_update_items'],

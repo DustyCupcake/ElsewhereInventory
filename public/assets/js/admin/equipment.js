@@ -11,6 +11,14 @@ let _items     = [];
 let _locations = [];
 let _activeTab = 'types';
 let _selected  = new Set(); // selected item ids for bulk actions
+let _csrf      = null;      // cached csrf token for multipart uploads
+
+async function getCsrf() {
+  if (_csrf) return _csrf;
+  const data = await get('/auth/csrf');
+  _csrf = data.csrf_token;
+  return _csrf;
+}
 
 export async function initEquipment(container, toast) {
   _toast = toast;
@@ -52,6 +60,19 @@ function renderShell(container) {
     saveItemEdit, cancelItemEdit,
     toggleSelect, toggleSelectAll, applyBulk,
     exportQR,
+    addSpecField, removeSpecField, moveSpecField,
+    uploadItemPhoto,
+    _useGps: () => {},
+    _slugLabel(labelEl, keyId) {
+      const keyEl = document.getElementById(keyId);
+      if (!keyEl || keyEl.dataset.manual) return;
+      keyEl.value = labelEl.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    },
+    _autoKey(el) { el.dataset.manual = '1'; },
+    _sfTypeChange(sel) {
+      const optRow = document.getElementById('sf-options-row');
+      if (optRow) optRow.style.display = sel.value === 'select' ? 'block' : 'none';
+    },
   };
 }
 
@@ -164,6 +185,50 @@ function showTypeForm(t) {
         <input type="checkbox" id="et-req-any" ${t?.require_any_location ? 'checked' : ''}>
         Must scan any storage location QR when returning
       </label>
+
+      <div style="margin-top:1rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:.5rem;color:var(--text2)">Spec fields for this type</div>
+        <div id="et-spec-fields">${_renderSpecFieldsList(t?.spec_fields ?? [])}</div>
+        <div id="et-spec-add-form" style="display:none;margin-top:.5rem;padding:.75rem;background:var(--surface2);border-radius:var(--radius)">
+          <div class="form-row" style="margin-bottom:.5rem">
+            <div class="field" style="margin:0">
+              <label>Key <span style="font-size:10px;color:var(--text3)">(a–z, 0–9, _)</span></label>
+              <input type="text" id="sf-key" placeholder="e.g. input_16a" maxlength="64" oninput="window._eq._autoKey(this)">
+            </div>
+            <div class="field" style="margin:0">
+              <label>Label</label>
+              <input type="text" id="sf-label" placeholder="e.g. 16A Inputs" maxlength="128"
+                oninput="window._eq._slugLabel(this,'sf-key')">
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom:.5rem">
+            <div class="field" style="margin:0">
+              <label>Type</label>
+              <select id="sf-type" onchange="window._eq._sfTypeChange(this)">
+                <option value="number">Number</option>
+                <option value="text">Text</option>
+                <option value="boolean">Boolean (yes/no)</option>
+                <option value="select">Select (dropdown)</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0">
+              <label>Unit <span style="font-size:10px;color:var(--text3)">(optional)</span></label>
+              <input type="text" id="sf-unit" placeholder="e.g. kVA, seats" maxlength="32">
+            </div>
+          </div>
+          <div id="sf-options-row" style="display:none;margin-bottom:.5rem">
+            <div class="field" style="margin:0">
+              <label>Options <span style="font-size:10px;color:var(--text3)">(one per line)</span></label>
+              <textarea id="sf-options" rows="3" placeholder="Diesel&#10;Petrol&#10;LPG"></textarea>
+            </div>
+          </div>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn primary sm" onclick="window._eq.addSpecField()">Add field</button>
+            <button class="btn sm" onclick="document.getElementById('et-spec-add-form').style.display='none'">Cancel</button>
+          </div>
+        </div>
+        <button class="btn sm" style="margin-top:.5rem" onclick="document.getElementById('et-spec-add-form').style.display='block';document.getElementById('sf-label').focus()">+ Add spec field</button>
+      </div>
 
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._eq.saveType()">Save</button>
@@ -486,6 +551,10 @@ function editItem(id) {
         </div>
       </div>
 
+      ${_renderItemSpecFields(it)}
+
+      ${_renderItemPhoto(it)}
+
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._eq.saveItemEdit()">Save</button>
         <button class="btn sm" onclick="window._eq.cancelItemEdit()">Cancel</button>
@@ -508,6 +577,8 @@ function editItem(id) {
   };
 }
 
+// ─── Spec fields ──────────────────────────────────────────────────────────────
+
 async function saveItemEdit() {
   const id       = +document.getElementById('ei-id').value;
   const homeLoc  = document.getElementById('ei-home-loc').value;
@@ -526,6 +597,25 @@ async function saveItemEdit() {
   payload.notes                  = notes || null;
   payload.latitude               = latVal  !== '' ? parseFloat(latVal)  : null;
   payload.longitude              = lngVal  !== '' ? parseFloat(lngVal)  : null;
+
+  // Collect spec values
+  const it = _items.find(x => x.id === id);
+  const type = _types.find(t => t.id === it?.type_id);
+  if (type?.spec_fields?.length) {
+    const sv = {};
+    for (const f of type.spec_fields) {
+      const el = document.getElementById('ei-sf-' + f.field_key);
+      if (!el) continue;
+      if (f.field_type === 'boolean') {
+        sv[f.field_key] = el.checked;
+      } else if (f.field_type === 'number') {
+        sv[f.field_key] = el.value !== '' ? parseFloat(el.value) : null;
+      } else {
+        sv[f.field_key] = el.value !== '' ? el.value : null;
+      }
+    }
+    payload.spec_values = sv;
+  }
 
   try {
     await put('/admin/items', payload);
@@ -552,6 +642,156 @@ async function deleteItem(id) {
 function exportQR(type_id = '') {
   const url = '/api/admin/items/qr-sheet' + (type_id ? '?type_id=' + type_id : '');
   window.open(url, '_blank');
+}
+
+// ─── Spec field helpers ───────────────────────────────────────────────────────
+
+function _renderSpecFieldsList(fields) {
+  if (!fields.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:.25rem">No spec fields defined yet.</div>';
+  return fields.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:.4rem;padding:.35rem .5rem;background:var(--surface2);border-radius:var(--radius);margin-bottom:.25rem;font-size:12px" data-sf-id="${f.id}">
+      <span style="flex:1;font-weight:500">${esc(f.label)}</span>
+      <span style="color:var(--text3)">${esc(f.field_key)}</span>
+      <span style="color:var(--text3);background:var(--surface3);padding:.1rem .35rem;border-radius:3px">${f.field_type}${f.unit ? ' · ' + esc(f.unit) : ''}</span>
+      <button class="action-btn" title="Move up" onclick="window._eq.moveSpecField(${f.id},-1)" ${i === 0 ? 'disabled' : ''}>↑</button>
+      <button class="action-btn" title="Move down" onclick="window._eq.moveSpecField(${f.id},1)" ${i === fields.length - 1 ? 'disabled' : ''}>↓</button>
+      <button class="action-btn danger" onclick="window._eq.removeSpecField(${f.id})">×</button>
+    </div>
+  `).join('');
+}
+
+function _renderItemSpecFields(it) {
+  const type = _types.find(t => t.id === it.type_id);
+  if (!type?.spec_fields?.length) return '';
+  const sv = it.spec_values || {};
+  const rows = type.spec_fields.map(f => {
+    const val = sv[f.field_key] ?? '';
+    let input;
+    if (f.field_type === 'boolean') {
+      input = `<input type="checkbox" id="ei-sf-${esc(f.field_key)}" ${val ? 'checked' : ''} style="width:auto;margin-top:.3rem">`;
+    } else if (f.field_type === 'select') {
+      const opts = (f.options || []).map(o => `<option value="${esc(o)}" ${val === o ? 'selected' : ''}>${esc(o)}</option>`).join('');
+      input = `<select id="ei-sf-${esc(f.field_key)}" style="margin:0"><option value="">—</option>${opts}</select>`;
+    } else if (f.field_type === 'number') {
+      input = `<input type="number" id="ei-sf-${esc(f.field_key)}" value="${esc(val)}" step="any"${f.unit ? ` placeholder="${esc(f.unit)}"` : ''}>`;
+    } else {
+      input = `<input type="text" id="ei-sf-${esc(f.field_key)}" value="${esc(val)}" maxlength="255">`;
+    }
+    const unitLabel = f.unit ? `<span style="font-size:11px;color:var(--text3);margin-left:.25rem">${esc(f.unit)}</span>` : '';
+    return `
+      <div class="field" style="margin:0;min-width:120px">
+        <label>${esc(f.label)}${unitLabel}</label>
+        ${input}
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="margin-top:.75rem">
+      <label style="display:block;font-size:13px;font-weight:500;margin-bottom:.4rem;color:var(--text2)">Specs</label>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">${rows}</div>
+    </div>`;
+}
+
+function _renderItemPhoto(it) {
+  const thumb = it.photo
+    ? `<div style="margin-bottom:.5rem"><img src="/${it.photo}?t=${Date.now()}" style="max-width:200px;max-height:140px;border-radius:var(--radius);border:1px solid var(--border)"></div>`
+    : `<div style="font-size:12px;color:var(--text3);margin-bottom:.5rem">No photo yet.</div>`;
+  return `
+    <div style="margin-top:.75rem">
+      <label style="display:block;font-size:13px;font-weight:500;margin-bottom:.4rem;color:var(--text2)">Photo</label>
+      <div id="ei-photo-thumb">${thumb}</div>
+      <input type="file" id="ei-photo-file" accept="image/*" style="font-size:12px">
+      <button class="btn sm" style="margin-top:.35rem" onclick="window._eq.uploadItemPhoto()">Upload photo</button>
+    </div>`;
+}
+
+async function uploadItemPhoto() {
+  const id   = +document.getElementById('ei-id')?.value;
+  const file = document.getElementById('ei-photo-file')?.files?.[0];
+  if (!id || !file) { _toast('Select a photo file first'); return; }
+
+  try {
+    const csrf = await getCsrf();
+    const fd   = new FormData();
+    fd.append('photo', file);
+    const resp = await fetch(`/api/items/${id}/photo`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrf },
+      credentials: 'include',
+      body: fd,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Upload failed');
+    _toast('Photo uploaded');
+    const thumb = document.getElementById('ei-photo-thumb');
+    if (thumb) thumb.innerHTML = `<img src="/${data.photo}?t=${Date.now()}" style="max-width:200px;max-height:140px;border-radius:var(--radius);border:1px solid var(--border)">`;
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+async function addSpecField() {
+  const typeId = +document.getElementById('et-id').value;
+  const key    = document.getElementById('sf-key').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  const label  = document.getElementById('sf-label').value.trim();
+  const ftype  = document.getElementById('sf-type').value;
+  const unit   = document.getElementById('sf-unit').value.trim();
+  const rawOpts = document.getElementById('sf-options')?.value ?? '';
+  const options  = rawOpts.split('\n').map(s => s.trim()).filter(Boolean);
+
+  if (!key)   { _toast('Key required'); return; }
+  if (!label) { _toast('Label required'); return; }
+  if (!/^[a-z0-9_]+$/.test(key)) { _toast('Key must be lowercase letters, numbers, and underscores'); return; }
+  if (ftype === 'select' && !options.length) { _toast('Options required for select type'); return; }
+
+  if (!typeId) {
+    // New type — queue field for after save. Not supported yet; show guidance.
+    _toast('Save the type first, then add spec fields.');
+    return;
+  }
+
+  try {
+    const payload = { field_key: key, label, field_type: ftype, unit: unit || null };
+    if (ftype === 'select') payload.options = options;
+    await post(`/admin/equipment-types/${typeId}/spec-fields`, payload);
+    _toast('Spec field added');
+    document.getElementById('et-spec-add-form').style.display = 'none';
+    document.getElementById('sf-key').value   = '';
+    document.getElementById('sf-label').value = '';
+    document.getElementById('sf-unit').value  = '';
+    if (document.getElementById('sf-options')) document.getElementById('sf-options').value = '';
+    await loadTypes();
+    const type = _types.find(t => t.id === typeId);
+    document.getElementById('et-spec-fields').innerHTML = _renderSpecFieldsList(type?.spec_fields ?? []);
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+async function removeSpecField(sfId) {
+  if (!confirm('Remove this spec field? Values stored on items will be deleted.')) return;
+  const typeId = +document.getElementById('et-id').value;
+  try {
+    await del(`/admin/spec-fields/${sfId}`, {});
+    _toast('Spec field removed');
+    await loadTypes();
+    const type = _types.find(t => t.id === typeId);
+    document.getElementById('et-spec-fields').innerHTML = _renderSpecFieldsList(type?.spec_fields ?? []);
+  } catch (e) { _toast('Error: ' + e.message); }
+}
+
+async function moveSpecField(sfId, dir) {
+  const typeId = +document.getElementById('et-id').value;
+  const type   = _types.find(t => t.id === typeId);
+  if (!type) return;
+  const fields = [...(type.spec_fields || [])];
+  const idx    = fields.findIndex(f => f.id === sfId);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= fields.length) return;
+  [fields[idx], fields[newIdx]] = [fields[newIdx], fields[idx]];
+  try {
+    await put(`/admin/equipment-types/${typeId}/spec-fields/reorder`, { order: fields.map(f => f.id) });
+    await loadTypes();
+    const updated = _types.find(t => t.id === typeId);
+    document.getElementById('et-spec-fields').innerHTML = _renderSpecFieldsList(updated?.spec_fields ?? []);
+  } catch (e) { _toast('Error: ' + e.message); }
 }
 
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

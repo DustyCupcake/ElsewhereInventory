@@ -19,6 +19,25 @@ function handle_list_types(): void {
          GROUP BY t.id
          ORDER BY t.name'
     )->fetchAll();
+
+    $sf_stmt = db()->query(
+        'SELECT id, equipment_type_id, field_key, label, field_type, unit, options, sort_order
+         FROM equipment_type_spec_fields ORDER BY equipment_type_id, sort_order'
+    );
+    $fields_by_type = [];
+    foreach ($sf_stmt->fetchAll() as $f) {
+        $tid = (int)$f['equipment_type_id'];
+        $fields_by_type[$tid][] = [
+            'id'         => (int)$f['id'],
+            'field_key'  => $f['field_key'],
+            'label'      => $f['label'],
+            'field_type' => $f['field_type'],
+            'unit'       => $f['unit'],
+            'options'    => $f['options'] ? json_decode($f['options'], true) : null,
+            'sort_order' => (int)$f['sort_order'],
+        ];
+    }
+
     foreach ($rows as &$r) {
         $r['id']                    = (int)$r['id'];
         $r['item_count']            = (int)$r['item_count'];
@@ -27,6 +46,7 @@ function handle_list_types(): void {
         $r['require_home_location'] = (bool)$r['require_home_location'];
         $r['require_any_location']  = (bool)$r['require_any_location'];
         $r['home_location_id']      = $r['home_location_id'] ? (int)$r['home_location_id'] : null;
+        $r['spec_fields']           = $fields_by_type[$r['id']] ?? [];
     }
     unset($r);
     json_ok(['types' => $rows]);
@@ -147,6 +167,7 @@ function handle_list_items(): void {
         "SELECT i.id, i.qr_code, i.item_number, i.status, i.notes, i.route_position,
                 i.latitude, i.longitude, i.created_at,
                 i.home_location_id, i.require_home_location, i.require_any_location,
+                i.spec_values, i.photo,
                 t.id AS type_id, t.name AS type_name, t.category,
                 CONCAT(t.name, ' #', i.item_number) AS display_name,
                 b.name AS current_barrio,
@@ -167,8 +188,9 @@ function handle_list_items(): void {
         $r['home_location_id'] = $r['home_location_id'] ? (int)$r['home_location_id'] : null;
         $r['require_home_location'] = $r['require_home_location'] !== null ? (bool)$r['require_home_location'] : null;
         $r['require_any_location']  = $r['require_any_location']  !== null ? (bool)$r['require_any_location']  : null;
-        $r['latitude']  = $r['latitude']  !== null ? (float)$r['latitude']  : null;
-        $r['longitude'] = $r['longitude'] !== null ? (float)$r['longitude'] : null;
+        $r['latitude']    = $r['latitude']    !== null ? (float)$r['latitude']    : null;
+        $r['longitude']   = $r['longitude']   !== null ? (float)$r['longitude']   : null;
+        $r['spec_values'] = $r['spec_values'] !== null ? json_decode($r['spec_values'], true) : (object)[];
     }
     unset($r);
     json_ok(['items' => $rows]);
@@ -279,6 +301,24 @@ function handle_update_item(): void {
         ? ($b['longitude'] !== null && $b['longitude'] !== '' ? (float)$b['longitude'] : null)
         : 'unset';
 
+    // Spec values — validate keys against allowed fields for this item's type
+    $spec_values = 'unset';
+    if (array_key_exists('spec_values', $b) && is_array($b['spec_values'])) {
+        $type_stmt = db()->prepare(
+            'SELECT field_key FROM equipment_type_spec_fields
+             WHERE equipment_type_id = (SELECT equipment_type_id FROM equipment_items WHERE id = ?)'
+        );
+        $type_stmt->execute([$id]);
+        $allowed_keys = array_column($type_stmt->fetchAll(), 'field_key');
+        $sv = array_intersect_key($b['spec_values'], array_flip($allowed_keys));
+        $spec_values = json_encode($sv);
+    }
+
+    // current_location_id for commissioning
+    $current_location_id = array_key_exists('current_location_id', $b)
+        ? ($b['current_location_id'] !== null && $b['current_location_id'] !== '' ? (int)$b['current_location_id'] : null)
+        : 'unset';
+
     if (!$id) json_error('id required');
     if ($status !== null && !in_array($status, ['available', 'checked-out', 'retired'], true)) {
         json_error('invalid status');
@@ -292,8 +332,10 @@ function handle_update_item(): void {
     if ($home_location_id !== false) { $sets[] = 'home_location_id = ?'; $params[] = $home_location_id; }
     if ($require_home     !== 'unset') { $sets[] = 'require_home_location = ?'; $params[] = $require_home; }
     if ($require_any      !== 'unset') { $sets[] = 'require_any_location = ?';  $params[] = $require_any; }
-    if ($latitude         !== 'unset') { $sets[] = 'latitude = ?';        $params[] = $latitude; }
-    if ($longitude        !== 'unset') { $sets[] = 'longitude = ?';       $params[] = $longitude; }
+    if ($latitude            !== 'unset') { $sets[] = 'latitude = ?';            $params[] = $latitude; }
+    if ($longitude           !== 'unset') { $sets[] = 'longitude = ?';           $params[] = $longitude; }
+    if ($spec_values         !== 'unset') { $sets[] = 'spec_values = ?';         $params[] = $spec_values; }
+    if ($current_location_id !== 'unset') { $sets[] = 'current_location_id = ?'; $params[] = $current_location_id; }
 
     if (empty($sets)) json_error('Nothing to update');
 
@@ -383,5 +425,161 @@ function handle_delete_item(): void {
     $stmt->execute([$id]);
     if ($stmt->rowCount() === 0) json_error('Item not found', 404);
 
+    json_ok(['success' => true]);
+}
+
+// ─── Spec fields ───────────────────────────────────────────────────────────────
+
+function handle_list_spec_fields(): void {
+    require_method('GET');
+    require_admin();
+
+    $type_id = (int)($_GET['id'] ?? 0);
+    if (!$type_id) json_error('type id required');
+
+    $stmt = db()->prepare(
+        'SELECT id, field_key, label, field_type, unit, options, sort_order
+         FROM equipment_type_spec_fields WHERE equipment_type_id = ? ORDER BY sort_order'
+    );
+    $stmt->execute([$type_id]);
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$r) {
+        $r['id']         = (int)$r['id'];
+        $r['sort_order'] = (int)$r['sort_order'];
+        $r['options']    = $r['options'] ? json_decode($r['options'], true) : null;
+    }
+    unset($r);
+    json_ok(['spec_fields' => $rows]);
+}
+
+function handle_create_spec_field(): void {
+    require_method('POST');
+    require_admin();
+    verify_csrf();
+
+    $type_id    = (int)($_GET['id'] ?? 0);
+    $b          = body();
+    $field_key  = trim($b['field_key'] ?? '');
+    $label      = trim($b['label'] ?? '');
+    $field_type = $b['field_type'] ?? 'text';
+    $unit       = trim($b['unit'] ?? '') ?: null;
+    $options    = null;
+
+    if (!$type_id)    json_error('type id required');
+    if (!$field_key)  json_error('field_key required');
+    if (!$label)      json_error('label required');
+    if (!preg_match('/^[a-z0-9_]+$/', $field_key)) json_error('field_key must be lowercase letters, numbers, and underscores only');
+    if (!in_array($field_type, ['number', 'text', 'boolean', 'select'], true)) json_error('invalid field_type');
+
+    if ($field_type === 'select') {
+        $opts = $b['options'] ?? [];
+        if (!is_array($opts) || empty($opts)) json_error('options required for select type');
+        $options = json_encode(array_values(array_filter(array_map('strval', $opts))));
+    }
+
+    // Get current max sort_order
+    $max_stmt = db()->prepare(
+        'SELECT COALESCE(MAX(sort_order), -1) FROM equipment_type_spec_fields WHERE equipment_type_id = ?'
+    );
+    $max_stmt->execute([$type_id]);
+    $sort_order = (int)$max_stmt->fetchColumn() + 1;
+
+    try {
+        $stmt = db()->prepare(
+            'INSERT INTO equipment_type_spec_fields (equipment_type_id, field_key, label, field_type, unit, options, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$type_id, $field_key, $label, $field_type, $unit, $options, $sort_order]);
+        $id = (int)db()->lastInsertId();
+    } catch (PDOException $e) {
+        if (str_contains($e->getMessage(), 'Duplicate')) json_error('field_key already exists for this type', 409);
+        throw $e;
+    }
+
+    json_ok(['id' => $id, 'field_key' => $field_key, 'label' => $label,
+             'field_type' => $field_type, 'unit' => $unit, 'sort_order' => $sort_order,
+             'options' => $options ? json_decode($options, true) : null], 201);
+}
+
+function handle_update_spec_field(): void {
+    require_method('PUT');
+    require_admin();
+    verify_csrf();
+
+    $sf_id = (int)($_GET['id'] ?? 0);
+    $b     = body();
+    if (!$sf_id) json_error('spec field id required');
+
+    $sets   = [];
+    $params = [];
+
+    if (array_key_exists('label', $b)) {
+        $label = trim($b['label']);
+        if (!$label) json_error('label cannot be empty');
+        $sets[] = 'label = ?'; $params[] = $label;
+    }
+    if (array_key_exists('unit', $b)) {
+        $sets[] = 'unit = ?'; $params[] = trim($b['unit']) ?: null;
+    }
+    if (array_key_exists('sort_order', $b)) {
+        $sets[] = 'sort_order = ?'; $params[] = (int)$b['sort_order'];
+    }
+    if (array_key_exists('options', $b)) {
+        $opts = $b['options'];
+        if (!is_array($opts)) json_error('options must be an array');
+        $sets[] = 'options = ?'; $params[] = json_encode(array_values(array_filter(array_map('strval', $opts))));
+    }
+
+    if (empty($sets)) json_error('Nothing to update');
+
+    $params[] = $sf_id;
+    $stmt = db()->prepare('UPDATE equipment_type_spec_fields SET ' . implode(', ', $sets) . ' WHERE id = ?');
+    $stmt->execute($params);
+    if ($stmt->rowCount() === 0) json_error('Spec field not found', 404);
+    json_ok(['success' => true]);
+}
+
+function handle_delete_spec_field(): void {
+    require_method('DELETE');
+    require_admin();
+    verify_csrf();
+
+    $sf_id = (int)($_GET['id'] ?? 0);
+    if (!$sf_id) json_error('spec field id required');
+
+    // Get field info before deleting
+    $sf_stmt = db()->prepare('SELECT equipment_type_id, field_key FROM equipment_type_spec_fields WHERE id = ?');
+    $sf_stmt->execute([$sf_id]);
+    $sf = $sf_stmt->fetch();
+    if (!$sf) json_error('Spec field not found', 404);
+
+    db()->prepare('DELETE FROM equipment_type_spec_fields WHERE id = ?')->execute([$sf_id]);
+
+    // Remove orphaned key from all items of this type
+    $clean = db()->prepare(
+        'UPDATE equipment_items SET spec_values = JSON_REMOVE(spec_values, ?)
+         WHERE equipment_type_id = ? AND spec_values IS NOT NULL'
+    );
+    $clean->execute(['$.' . $sf['field_key'], (int)$sf['equipment_type_id']]);
+
+    json_ok(['success' => true]);
+}
+
+function handle_reorder_spec_fields(): void {
+    require_method('PUT');
+    require_admin();
+    verify_csrf();
+
+    $type_id = (int)($_GET['id'] ?? 0);
+    $b       = body();
+    $order   = $b['order'] ?? [];
+
+    if (!$type_id) json_error('type id required');
+    if (!is_array($order)) json_error('order must be an array');
+
+    $stmt = db()->prepare('UPDATE equipment_type_spec_fields SET sort_order = ? WHERE id = ? AND equipment_type_id = ?');
+    foreach ($order as $i => $sf_id) {
+        $stmt->execute([(int)$i, (int)$sf_id, $type_id]);
+    }
     json_ok(['success' => true]);
 }

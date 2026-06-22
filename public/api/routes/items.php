@@ -16,6 +16,7 @@ function handle_lookup(): void {
                 i.home_location_id AS item_home_loc_id,
                 i.require_home_location AS item_require_home,
                 i.require_any_location AS item_require_any,
+                i.spec_values, i.photo,
                 t.name AS type_name, t.category, t.secure_qr, t.borrowable,
                 t.home_location_id AS type_home_loc_id,
                 t.require_home_location AS type_require_home,
@@ -56,6 +57,25 @@ function handle_lookup(): void {
         ? (bool)$item['item_require_any']
         : (bool)$item['type_require_any'];
 
+    // Load spec fields for this item's type
+    $sf_stmt = db()->prepare(
+        'SELECT id, field_key, label, field_type, unit, options, sort_order
+         FROM equipment_type_spec_fields WHERE equipment_type_id = ? ORDER BY sort_order'
+    );
+    $sf_stmt->execute([(int)$item['equipment_type_id']]);
+    $spec_fields = [];
+    foreach ($sf_stmt->fetchAll() as $f) {
+        $spec_fields[] = [
+            'id'         => (int)$f['id'],
+            'field_key'  => $f['field_key'],
+            'label'      => $f['label'],
+            'field_type' => $f['field_type'],
+            'unit'       => $f['unit'],
+            'options'    => $f['options'] ? json_decode($f['options'], true) : null,
+            'sort_order' => (int)$f['sort_order'],
+        ];
+    }
+
     json_ok([
         'id'                   => (int)$item['id'],
         'qr_code'              => $item['qr_code'],
@@ -93,6 +113,9 @@ function handle_lookup(): void {
         'borrowable'           => $borrowable,
         'borrow_eligible'      => $eligibility['eligible'],
         'borrow_reason'        => $eligibility['reason'],
+        'spec_fields'          => $spec_fields,
+        'spec_values'          => $item['spec_values'] ? json_decode($item['spec_values'], true) : (object)[],
+        'photo'                => $item['photo'],
     ]);
 }
 
@@ -112,6 +135,7 @@ function handle_inventory(): void {
 
     $rows = db()->prepare(
         "SELECT i.id, i.qr_code, i.status, i.dept_label,
+                i.equipment_type_id, i.spec_values, i.photo,
                 CONCAT(t.name, ' #', i.item_number) AS name,
                 t.category,
                 d.name AS current_dept,
@@ -135,14 +159,97 @@ function handle_inventory(): void {
         if ($it['status'] === 'checked-out')  $checked_out++;
     }
 
-    // Cast ids
     foreach ($items as &$it) {
-        $it['id'] = (int)$it['id'];
+        $it['id']               = (int)$it['id'];
+        $it['equipment_type_id'] = (int)$it['equipment_type_id'];
+        $it['spec_values']      = $it['spec_values'] ? json_decode($it['spec_values'], true) : (object)[];
     }
     unset($it);
 
+    // Spec schemas keyed by equipment_type_id for client-side filter rendering
+    $sf_all = db()->query(
+        'SELECT equipment_type_id, field_key, label, field_type, unit, options, sort_order
+         FROM equipment_type_spec_fields ORDER BY equipment_type_id, sort_order'
+    )->fetchAll();
+    $spec_schemas = [];
+    foreach ($sf_all as $f) {
+        $tid = (int)$f['equipment_type_id'];
+        $spec_schemas[$tid][] = [
+            'field_key'  => $f['field_key'],
+            'label'      => $f['label'],
+            'field_type' => $f['field_type'],
+            'unit'       => $f['unit'],
+            'options'    => $f['options'] ? json_decode($f['options'], true) : null,
+        ];
+    }
+
     json_ok([
-        'stats' => ['available' => $available, 'checked_out' => $checked_out],
-        'items' => $items,
+        'stats'        => ['available' => $available, 'checked_out' => $checked_out],
+        'items'        => $items,
+        'spec_schemas' => $spec_schemas,
     ]);
+}
+
+function handle_upload_item_photo(): void {
+    require_method('POST');
+    require_permission('manage_equipment');
+    verify_csrf();
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) json_error('item id required');
+
+    // Verify item exists
+    $chk = db()->prepare('SELECT id FROM equipment_items WHERE id = ?');
+    $chk->execute([$id]);
+    if (!$chk->fetch()) json_error('Item not found', 404);
+
+    if (empty($_FILES['photo']) || $_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
+        $err = $_FILES['photo']['error'] ?? -1;
+        json_error('No file uploaded or upload error: ' . $err);
+    }
+
+    $file = $_FILES['photo'];
+    $mime = mime_content_type($file['tmp_name']);
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) {
+        json_error('Only image files are accepted');
+    }
+
+    $dir = __DIR__ . '/../../storage/item_photos/';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    // Always save as jpg; resize if GD available
+    $dest_rel = 'storage/item_photos/' . $id . '.jpg';
+    $dest     = __DIR__ . '/../../' . $dest_rel;
+
+    if (function_exists('imagecreatefromstring')) {
+        $src_data = file_get_contents($file['tmp_name']);
+        $src_img  = imagecreatefromstring($src_data);
+        if ($src_img !== false) {
+            $orig_w = imagesx($src_img);
+            $orig_h = imagesy($src_img);
+            $max    = 1600;
+            if ($orig_w > $max || $orig_h > $max) {
+                $ratio = min($max / $orig_w, $max / $orig_h);
+                $new_w = (int)round($orig_w * $ratio);
+                $new_h = (int)round($orig_h * $ratio);
+                $dst_img = imagecreatetruecolor($new_w, $new_h);
+                imagecopyresampled($dst_img, $src_img, 0, 0, 0, 0, $new_w, $new_h, $orig_w, $orig_h);
+                imagedestroy($src_img);
+                $src_img = $dst_img;
+            }
+            imagejpeg($src_img, $dest, 85);
+            imagedestroy($src_img);
+        } else {
+            move_uploaded_file($file['tmp_name'], $dest);
+        }
+    } else {
+        move_uploaded_file($file['tmp_name'], $dest);
+    }
+
+    $stmt = db()->prepare('UPDATE equipment_items SET photo = ? WHERE id = ?');
+    $stmt->execute([$dest_rel, $id]);
+
+    json_ok(['photo' => $dest_rel]);
 }
