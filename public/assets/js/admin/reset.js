@@ -8,7 +8,6 @@ const OPERATIONS = [
     { key: 'clear_fill_queue',    label: 'Clear water fill queue',                   desc: 'Cancels all pending and in-progress fill requests.' },
     { key: 'clear_item_notes',    label: 'Clear equipment notes',                    desc: 'Removes all free-text notes from equipment items.' },
     { key: 'expire_shifts',       label: 'Expire volunteer shift sessions',          desc: 'Immediately expires all active shift QR sessions.' },
-    { key: 'clear_transactions',  label: 'Delete transaction history',               desc: 'Permanently deletes all checkout and check-in records from the audit log.', danger: true },
 ];
 
 export async function initReset(el, toast) {
@@ -149,7 +148,6 @@ export async function initReset(el, toast) {
             if (c.fill_requests_cleared       != null) lines.push(`${c.fill_requests_cleared} fill requests cleared.`);
             if (c.items_notes_cleared         != null) lines.push(`${c.items_notes_cleared} item notes cleared.`);
             if (c.shifts_expired              != null) lines.push(`${c.shifts_expired} shift sessions expired.`);
-            if (c.transactions_deleted        != null) lines.push(`${c.transactions_deleted} transactions deleted.`);
 
             resultEl.innerHTML  = lines.join(' ');
             resultEl.className  = 'reset-result reset-result--ok';

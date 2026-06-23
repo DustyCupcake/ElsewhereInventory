@@ -126,13 +126,6 @@ function handle_system_reset(): void {
             $counts['shifts_expired'] = $stmt->rowCount();
         }
 
-        // Delete all transaction history
-        if (!empty($ops['clear_transactions'])) {
-            $stmt = $db->prepare('DELETE FROM transactions');
-            $stmt->execute();
-            $counts['transactions_deleted'] = $stmt->rowCount();
-        }
-
         $db->commit();
 
     } catch (Throwable $e) {
