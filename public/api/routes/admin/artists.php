@@ -167,6 +167,7 @@ function handle_import_artists_csv(): void {
     if (!$fh) json_error('Could not read file');
 
     $header  = array_map('strtolower', array_map('trim', fgetcsv($fh)));
+    if (isset($header[0])) $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]);
     $name_i  = array_search('name', $header);
     $order_i = array_search('sort_order', $header);
     $staff_i = array_search('assigned_staff', $header);

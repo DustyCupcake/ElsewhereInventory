@@ -211,6 +211,7 @@ function handle_import_csv(): void {
     $headers = fgetcsv($fh);
     if (!$headers) { fclose($fh); json_error('Empty CSV', 400); }
     $headers = array_map('trim', $headers);
+    if (isset($headers[0])) $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
 
     $name_col = array_search('name', $headers, true);
     if ($name_col === false) { fclose($fh); json_error('CSV must have a "name" column', 400); }

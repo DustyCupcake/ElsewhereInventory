@@ -234,6 +234,9 @@ $routes = [
     ['DELETE', '/admin/users',                   'routes/admin/users.php',       'handle_delete'],
     ['POST',   '/admin/users/reset-password',    'routes/admin/users.php',       'handle_reset_password'],
     ['GET',    '/admin/users/qr-sheet',          'routes/admin/users.php',       'handle_user_qr_sheet'],
+
+    // Admin — system
+    ['POST',   '/admin/system/reset',            'routes/admin/system.php',      'handle_reset'],
 ];
 
 $matched = false;

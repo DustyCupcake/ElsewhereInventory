@@ -66,6 +66,14 @@ function render(container) {
         <label for="barrio-sort">Sort order</label>
         <input type="text" id="barrio-sort" placeholder="0" style="max-width:80px">
       </div>
+      <div class="field" id="barrio-status-field" style="display:none">
+        <label for="barrio-status">Arrival status</label>
+        <select id="barrio-status">
+          <option value="expected">Expected</option>
+          <option value="on-site">On-site</option>
+          <option value="departed">Departed</option>
+        </select>
+      </div>
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._barrios.save()">Save</button>
         <button class="btn sm" onclick="window._barrios.closeForm()">Cancel</button>
@@ -123,13 +131,19 @@ function renderTable(wrap) {
     wrap.innerHTML = '<div class="empty">No barrios yet — add one above</div>';
     return;
   }
+  const statusBadge = s => {
+    if (s === 'on-site')  return `<span class="badge available" style="font-size:11px">On-site</span>`;
+    if (s === 'departed') return `<span class="badge" style="font-size:11px;background:var(--danger-bg);color:var(--danger)">Departed</span>`;
+    return `<span style="color:var(--text3);font-size:12px">Expected</span>`;
+  };
   wrap.innerHTML = `
     <table class="data-table">
-      <thead><tr><th>Name</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Status</th><th></th></tr></thead>
       <tbody>
         ${_barrios.map(b => `
           <tr>
             <td>${esc(b.name)}</td>
+            <td>${statusBadge(b.arrival_status || 'expected')}</td>
             <td>
               <div class="table-actions">
                 <button class="action-btn" onclick="window.open('/api/admin/barrio-qr?id=${b.id}','_blank')">QR</button>
@@ -153,6 +167,7 @@ function openAdd() {
   document.getElementById('barrio-id').value   = '';
   document.getElementById('barrio-name').value = '';
   document.getElementById('barrio-sort').value = '0';
+  document.getElementById('barrio-status-field').style.display = 'none';
   document.getElementById('barrio-form').style.display = '';
   document.getElementById('barrio-name').focus();
 }
@@ -165,6 +180,8 @@ function openEdit(id) {
   document.getElementById('barrio-id').value   = id;
   document.getElementById('barrio-name').value = b.name;
   document.getElementById('barrio-sort').value = b.sort_order;
+  document.getElementById('barrio-status').value = b.arrival_status || 'expected';
+  document.getElementById('barrio-status-field').style.display = '';
   document.getElementById('barrio-form').style.display = '';
   document.getElementById('barrio-name').focus();
 }
@@ -182,7 +199,8 @@ async function save() {
 
   try {
     if (id) {
-      await put('/admin/barrios', { id: +id, name, sort_order: sort });
+      const status = document.getElementById('barrio-status').value;
+      await put('/admin/barrios', { id: +id, name, sort_order: sort, arrival_status: status });
       _toast('Barrio updated');
     } else {
       await post('/admin/barrios', { name, sort_order: sort });
@@ -298,6 +316,7 @@ async function saveOrders() {
       });
     }
 
+    if (btn) { btn.disabled = false; btn.textContent = 'Save orders'; }
     _toast('Orders saved');
     closeOrders();
   } catch (e) {

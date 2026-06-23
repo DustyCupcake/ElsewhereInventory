@@ -383,3 +383,22 @@
     min-height: 200px;
   }
 }
+
+/* ── Reset section ─────────────────────────────────────────────────────── */
+.reset-option {
+  display: flex;
+  align-items: flex-start;
+  gap: .65rem;
+  cursor: pointer;
+  padding: .5rem .75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.reset-option:hover {
+  background: var(--surface2);
+}
+.reset-option input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}

@@ -5,7 +5,7 @@ function handle_list(): void {
     require_method('GET');
     require_permission('manage_barrios');
 
-    $rows = db()->query('SELECT id, name, sort_order, created_at FROM barrios ORDER BY sort_order, name')->fetchAll();
+    $rows = db()->query('SELECT id, name, sort_order, arrival_status, created_at FROM barrios ORDER BY sort_order, name')->fetchAll();
     foreach ($rows as &$r) $r['id'] = (int)$r['id'];
     unset($r);
     json_ok(['barrios' => $rows]);
@@ -41,16 +41,27 @@ function handle_update(): void {
     require_permission('manage_barrios');
     verify_csrf();
 
-    $b    = body();
-    $id   = (int)($b['id'] ?? $_GET['id'] ?? 0);
-    $name = trim($b['name'] ?? '');
-    $sort = (int)($b['sort_order'] ?? 0);
+    $b      = body();
+    $id     = (int)($b['id'] ?? $_GET['id'] ?? 0);
+    $name   = trim($b['name'] ?? '');
+    $sort   = (int)($b['sort_order'] ?? 0);
+    $status = $b['arrival_status'] ?? null;
 
     if (!$id || $name === '') json_error('id and name required');
 
+    $valid_statuses = ['expected', 'on-site', 'departed'];
+    if ($status !== null && !in_array($status, $valid_statuses, true)) {
+        json_error('Invalid arrival_status');
+    }
+
     try {
-        $stmt = db()->prepare('UPDATE barrios SET name = ?, sort_order = ? WHERE id = ?');
-        $stmt->execute([$name, $sort, $id]);
+        if ($status !== null) {
+            $stmt = db()->prepare('UPDATE barrios SET name = ?, sort_order = ?, arrival_status = ? WHERE id = ?');
+            $stmt->execute([$name, $sort, $status, $id]);
+        } else {
+            $stmt = db()->prepare('UPDATE barrios SET name = ?, sort_order = ? WHERE id = ?');
+            $stmt->execute([$name, $sort, $id]);
+        }
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) json_error('Name already exists', 409);
         throw $e;
