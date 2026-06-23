@@ -253,3 +253,251 @@ function handle_upload_item_photo(): void {
 
     json_ok(['photo' => $dest_rel]);
 }
+
+/**
+ * Public — full deployment history for an item, plus the currently active event.
+ */
+function handle_item_deployments(): void {
+    require_method('GET');
+
+    $qr = trim($_GET['qr'] ?? '');
+    if ($qr === '') json_error('qr required');
+
+    $db = db();
+
+    // Resolve item
+    $stmt = $db->prepare('SELECT id FROM equipment_items WHERE qr_code = ?');
+    $stmt->execute([$qr]);
+    $item = $stmt->fetch();
+    if (!$item) json_error('Item not found', 404);
+    $item_id = (int)$item['id'];
+
+    // Active event (for the log-deployment form)
+    $stmt = $db->prepare('SELECT id, name, event_date FROM events WHERE is_active = 1 LIMIT 1');
+    $stmt->execute();
+    $active_event = $stmt->fetch() ?: null;
+
+    // All deployments for this item, newest event first
+    $stmt = $db->prepare(
+        'SELECT d.id, d.notes, d.latitude, d.longitude, d.logged_at,
+                u.display_name AS logged_by_name,
+                e.id AS event_id, e.name AS event_name, e.event_date
+         FROM item_deployments d
+         JOIN events e ON e.id = d.event_id
+         LEFT JOIN users u ON u.id = d.logged_by
+         WHERE d.item_id = ?
+         ORDER BY COALESCE(e.event_date, \'0000-01-01\') DESC, d.logged_at DESC'
+    );
+    $stmt->execute([$item_id]);
+    $rows = $stmt->fetchAll();
+
+    // All photos for this item (general + deployment-linked), keyed by deployment_id
+    $stmt = $db->prepare(
+        'SELECT id, deployment_id, path, caption, uploaded_at
+         FROM item_photos
+         WHERE item_id = ?
+         ORDER BY uploaded_at ASC'
+    );
+    $stmt->execute([$item_id]);
+    $photos_by_dep = [];
+    foreach ($stmt->fetchAll() as $p) {
+        $key = $p['deployment_id'] ?? 'general';
+        $photos_by_dep[$key][] = [
+            'id'          => (int)$p['id'],
+            'path'        => $p['path'],
+            'caption'     => $p['caption'],
+            'uploaded_at' => $p['uploaded_at'],
+        ];
+    }
+
+    $deployments = array_map(fn($d) => [
+        'id'           => (int)$d['id'],
+        'event_id'     => (int)$d['event_id'],
+        'event_name'   => $d['event_name'],
+        'event_date'   => $d['event_date'],
+        'notes'        => $d['notes'],
+        'latitude'     => $d['latitude'] !== null ? (float)$d['latitude'] : null,
+        'longitude'    => $d['longitude'] !== null ? (float)$d['longitude'] : null,
+        'logged_by'    => $d['logged_by_name'],
+        'logged_at'    => $d['logged_at'],
+        'photos'       => $photos_by_dep[(int)$d['id']] ?? [],
+    ], $rows);
+
+    json_ok([
+        'item_id'      => $item_id,
+        'active_event' => $active_event,
+        'general_photos' => $photos_by_dep['general'] ?? [],
+        'deployments'  => $deployments,
+    ]);
+}
+
+/**
+ * Auth — log or update a deployment for the currently active event.
+ * Upserts by (item_id, event_id) so re-scanning is always safe.
+ */
+function handle_log_deployment(): void {
+    require_method('POST');
+    require_permission('checkout_equipment');
+    verify_csrf();
+
+    $body = body();
+    $qr    = trim($body['qr'] ?? '');
+    $notes = trim($body['notes'] ?? '') ?: null;
+    $lat   = isset($body['latitude'])  ? (float)$body['latitude']  : null;
+    $lng   = isset($body['longitude']) ? (float)$body['longitude'] : null;
+
+    if ($qr === '') json_error('qr required');
+
+    $db = db();
+
+    // Resolve item
+    $stmt = $db->prepare('SELECT id FROM equipment_items WHERE qr_code = ?');
+    $stmt->execute([$qr]);
+    $item = $stmt->fetch();
+    if (!$item) json_error('Item not found', 404);
+
+    // Require an active event
+    $stmt = $db->prepare('SELECT id, name FROM events WHERE is_active = 1 LIMIT 1');
+    $stmt->execute();
+    $event = $stmt->fetch();
+    if (!$event) json_error('No active event — ask a production admin to start one', 409);
+
+    $item_id  = (int)$item['id'];
+    $event_id = (int)$event['id'];
+    $user_id  = $_SESSION['user_id'] ?? null;
+
+    // Upsert: insert or update notes/geo if already logged for this event
+    $stmt = $db->prepare(
+        'INSERT INTO item_deployments (item_id, event_id, notes, latitude, longitude, logged_by, logged_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+             notes     = VALUES(notes),
+             latitude  = VALUES(latitude),
+             longitude = VALUES(longitude),
+             logged_by = VALUES(logged_by),
+             logged_at = NOW()'
+    );
+    $stmt->execute([$item_id, $event_id, $notes, $lat, $lng, $user_id]);
+
+    // Fetch the resulting deployment id
+    $stmt = $db->prepare(
+        'SELECT id FROM item_deployments WHERE item_id = ? AND event_id = ?'
+    );
+    $stmt->execute([$item_id, $event_id]);
+    $dep = $stmt->fetch();
+
+    json_ok([
+        'deployment_id' => (int)$dep['id'],
+        'event'         => ['id' => $event_id, 'name' => $event['name']],
+    ]);
+}
+
+/**
+ * Auth — upload a photo linked to a deployment (or as a general item photo).
+ * Accepts: multipart with 'photo' file and 'deployment_id' (optional).
+ * Item is identified via 'item_id' POST field.
+ */
+function handle_upload_deployment_photo(): void {
+    require_method('POST');
+    require_permission('checkout_equipment');
+    verify_csrf();
+
+    $item_id      = (int)($_POST['item_id']      ?? 0);
+    $deployment_id = isset($_POST['deployment_id']) ? (int)$_POST['deployment_id'] : null;
+
+    if (!$item_id) json_error('item_id required');
+
+    $db = db();
+
+    // Verify item
+    $stmt = $db->prepare('SELECT id FROM equipment_items WHERE id = ?');
+    $stmt->execute([$item_id]);
+    if (!$stmt->fetch()) json_error('Item not found', 404);
+
+    // Verify deployment belongs to item (if provided)
+    if ($deployment_id !== null) {
+        $stmt = $db->prepare('SELECT id FROM item_deployments WHERE id = ? AND item_id = ?');
+        $stmt->execute([$deployment_id, $item_id]);
+        if (!$stmt->fetch()) json_error('Deployment not found for this item', 404);
+    }
+
+    if (empty($_FILES['photo']) || $_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
+        json_error('No file uploaded or upload error: ' . ($_FILES['photo']['error'] ?? -1));
+    }
+
+    $file = $_FILES['photo'];
+    $mime = mime_content_type($file['tmp_name']);
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) {
+        json_error('Only image files are accepted');
+    }
+
+    $dir = __DIR__ . '/../../../storage/item_photos/';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+    // Insert photo row first to get the id for the filename
+    $user_id = $_SESSION['user_id'] ?? null;
+    $stmt = $db->prepare(
+        'INSERT INTO item_photos (item_id, deployment_id, path, uploaded_by) VALUES (?, ?, \'\', ?)'
+    );
+    $stmt->execute([$item_id, $deployment_id, $user_id]);
+    $photo_id = (int)$db->lastInsertId();
+
+    $dest_rel = 'storage/item_photos/photo_' . $photo_id . '.jpg';
+    $dest     = __DIR__ . '/../../../' . $dest_rel;
+
+    if (function_exists('imagecreatefromstring')) {
+        $src_data = file_get_contents($file['tmp_name']);
+        $src_img  = imagecreatefromstring($src_data);
+        if ($src_img !== false) {
+            $orig_w = imagesx($src_img);
+            $orig_h = imagesy($src_img);
+            $max    = 1600;
+            if ($orig_w > $max || $orig_h > $max) {
+                $ratio   = min($max / $orig_w, $max / $orig_h);
+                $new_w   = (int)round($orig_w * $ratio);
+                $new_h   = (int)round($orig_h * $ratio);
+                $dst_img = imagecreatetruecolor($new_w, $new_h);
+                imagecopyresampled($dst_img, $src_img, 0, 0, 0, 0, $new_w, $new_h, $orig_w, $orig_h);
+                imagedestroy($src_img);
+                $src_img = $dst_img;
+            }
+            imagejpeg($src_img, $dest, 85);
+            imagedestroy($src_img);
+        } else {
+            move_uploaded_file($file['tmp_name'], $dest);
+        }
+    } else {
+        move_uploaded_file($file['tmp_name'], $dest);
+    }
+
+    $stmt = $db->prepare('UPDATE item_photos SET path = ? WHERE id = ?');
+    $stmt->execute([$dest_rel, $photo_id]);
+
+    json_ok(['photo_id' => $photo_id, 'path' => $dest_rel]);
+}
+
+/**
+ * Auth — delete a gallery photo by id.
+ */
+function handle_delete_item_photo_gallery(): void {
+    require_method('DELETE');
+    require_permission('manage_equipment');
+    verify_csrf();
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) json_error('id required');
+
+    $stmt = db()->prepare('SELECT path FROM item_photos WHERE id = ?');
+    $stmt->execute([$id]);
+    $photo = $stmt->fetch();
+    if (!$photo) json_error('Photo not found', 404);
+
+    $stmt = db()->prepare('DELETE FROM item_photos WHERE id = ?');
+    $stmt->execute([$id]);
+
+    // Best-effort file removal
+    $abs = __DIR__ . '/../../../' . $photo['path'];
+    if (is_file($abs)) @unlink($abs);
+
+    json_ok(['deleted' => true]);
+}
