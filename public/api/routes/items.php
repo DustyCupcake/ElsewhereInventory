@@ -17,7 +17,7 @@ function handle_lookup(): void {
                 i.require_home_location AS item_require_home,
                 i.require_any_location AS item_require_any,
                 i.spec_values, i.photo,
-                t.name AS type_name, t.category, t.secure_qr, t.borrowable,
+                t.name AS type_name, t.category, t.secure_qr, t.borrowable, t.is_crate, t.deployment_destination,
                 t.home_location_id AS type_home_loc_id,
                 t.require_home_location AS type_require_home,
                 t.require_any_location AS type_require_any,
@@ -114,8 +114,10 @@ function handle_lookup(): void {
         'borrow_eligible'      => $eligibility['eligible'],
         'borrow_reason'        => $eligibility['reason'],
         'spec_fields'          => $spec_fields,
-        'spec_values'          => $item['spec_values'] ? json_decode($item['spec_values'], true) : (object)[],
-        'photo'                => $item['photo'],
+        'spec_values'            => $item['spec_values'] ? json_decode($item['spec_values'], true) : (object)[],
+        'photo'                  => $item['photo'],
+        'is_crate'               => (bool)$item['is_crate'],
+        'deployment_destination' => $item['deployment_destination'],
     ]);
 }
 
@@ -474,6 +476,104 @@ function handle_upload_deployment_photo(): void {
     $stmt->execute([$dest_rel, $photo_id]);
 
     json_ok(['photo_id' => $photo_id, 'path' => $dest_rel]);
+}
+
+/**
+ * Public — get the current contents manifest for a crate item.
+ */
+function handle_get_manifest(): void {
+    require_method('GET');
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) json_error('id required');
+
+    $db = db();
+
+    // Verify item exists and is a crate type
+    $stmt = $db->prepare(
+        'SELECT i.id, t.is_crate, t.deployment_destination
+         FROM equipment_items i
+         JOIN equipment_types t ON t.id = i.equipment_type_id
+         WHERE i.id = ?'
+    );
+    $stmt->execute([$id]);
+    $item = $stmt->fetch();
+    if (!$item) json_error('Item not found', 404);
+    if (!$item['is_crate']) json_error('Item is not a crate', 404);
+
+    $stmt = $db->prepare(
+        'SELECT id, content_name, quantity, notes, sort_order
+         FROM crate_manifest WHERE item_id = ? ORDER BY sort_order, id'
+    );
+    $stmt->execute([$id]);
+    $rows = array_map(fn($r) => [
+        'id'           => (int)$r['id'],
+        'content_name' => $r['content_name'],
+        'quantity'     => (int)$r['quantity'],
+        'notes'        => $r['notes'],
+        'sort_order'   => (int)$r['sort_order'],
+    ], $stmt->fetchAll());
+
+    json_ok([
+        'item_id'                => $id,
+        'deployment_destination' => $item['deployment_destination'],
+        'manifest'               => $rows,
+    ]);
+}
+
+/**
+ * Auth — replace the contents manifest for a crate item.
+ * Full replace: all existing rows are deleted, submitted rows inserted.
+ */
+function handle_save_manifest(): void {
+    require_method('PUT');
+    require_permission('checkout_equipment');
+    verify_csrf();
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) json_error('id required');
+
+    $b    = body();
+    $rows = $b['rows'] ?? [];
+    if (!is_array($rows)) json_error('rows must be an array');
+    if (count($rows) > 200) json_error('Maximum 200 rows allowed');
+
+    $db = db();
+
+    // Verify item is a crate
+    $stmt = $db->prepare(
+        'SELECT i.id FROM equipment_items i
+         JOIN equipment_types t ON t.id = i.equipment_type_id
+         WHERE i.id = ? AND t.is_crate = 1'
+    );
+    $stmt->execute([$id]);
+    if (!$stmt->fetch()) json_error('Crate item not found', 404);
+
+    $db->beginTransaction();
+    try {
+        $db->prepare('DELETE FROM crate_manifest WHERE item_id = ?')->execute([$id]);
+
+        if (!empty($rows)) {
+            $ins = $db->prepare(
+                'INSERT INTO crate_manifest (item_id, content_name, quantity, notes, sort_order)
+                 VALUES (?, ?, ?, ?, ?)'
+            );
+            foreach ($rows as $i => $r) {
+                $name = trim($r['content_name'] ?? '');
+                $qty  = max(1, (int)($r['quantity'] ?? 1));
+                $notes = isset($r['notes']) && trim($r['notes']) !== '' ? trim($r['notes']) : null;
+                $sort  = (int)($r['sort_order'] ?? $i);
+                if ($name === '') continue;
+                $ins->execute([$id, $name, $qty, $notes, $sort]);
+            }
+        }
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    json_ok(['saved' => true]);
 }
 
 /**

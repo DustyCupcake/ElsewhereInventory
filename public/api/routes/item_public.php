@@ -17,7 +17,7 @@ function handle_item_info(): void {
     }
 
     $stmt = db()->prepare(
-        'SELECT i.status, i.current_barrio_id, t.secure_qr,
+        'SELECT i.status, i.current_barrio_id, t.secure_qr, t.is_crate, t.deployment_destination,
                 CONCAT(t.name, \' #\', i.item_number) AS display_name,
                 t.name AS type_name
          FROM equipment_items i
@@ -39,10 +39,12 @@ function handle_item_info(): void {
     };
 
     json_ok([
-        'found'       => true,
-        'name'        => $item['display_name'],
-        'type_name'   => $item['type_name'],
-        'is_voucher'  => (bool) $item['secure_qr'],
-        'status'      => $status_label,
+        'found'                  => true,
+        'name'                   => $item['display_name'],
+        'type_name'              => $item['type_name'],
+        'is_voucher'             => (bool) $item['secure_qr'],
+        'is_crate'               => (bool) $item['is_crate'],
+        'deployment_destination' => $item['deployment_destination'],
+        'status'                 => $status_label,
     ]);
 }

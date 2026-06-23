@@ -116,6 +116,7 @@ function renderTypesTable() {
               ${esc(t.name)}
               ${t.secure_qr ? '<span class="badge voucher" style="margin-left:.4rem;font-size:10px">Voucher</span>' : ''}
               ${t.borrowable ? '<span class="badge" style="margin-left:.4rem;font-size:10px;background:var(--accent-light);color:var(--accent-text)">Borrowable</span>' : ''}
+              ${t.is_crate ? '<span class="badge" style="margin-left:.4rem;font-size:10px;background:var(--surface2);color:var(--text2)">Crate</span>' : ''}
             </td>
             <td>${t.item_count}</td>
             <td style="font-size:12px;color:var(--text2)">
@@ -169,6 +170,18 @@ function showTypeForm(t) {
         <input type="checkbox" id="et-borrowable" ${t?.borrowable ? 'checked' : ''}>
         Borrowable — staff can personally check out items of this type
       </label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="et-crate" ${t?.is_crate ? 'checked' : ''}
+               onchange="document.getElementById('et-crate-dest').style.display=this.checked?'block':'none'">
+        Crate — holds unlabeled items tracked by manifest (ladles, supplies, etc.)
+      </label>
+      <div id="et-crate-dest" style="${t?.is_crate ? '' : 'display:none;'}margin-top:.25rem">
+        <div class="field" style="margin-top:0">
+          <label>Deployment destination <span style="font-size:11px;color:var(--text3)">(where this crate goes at the event)</span></label>
+          <input type="text" id="et-dest" value="${esc(t?.deployment_destination ?? '')}"
+                 placeholder="e.g. Cantina kitchen area" maxlength="255">
+        </div>
+      </div>
 
       <div class="field" style="margin-top:.75rem">
         <label>Home storage location (optional — default for all items of this type)</label>
@@ -245,13 +258,15 @@ async function saveType() {
   const cat                 = document.getElementById('et-cat').value.trim();
   const secure_qr           = document.getElementById('et-secure').checked;
   const borrowable          = document.getElementById('et-borrowable').checked;
+  const is_crate            = document.getElementById('et-crate').checked;
+  const deployment_destination = document.getElementById('et-dest')?.value.trim() || null;
   const home_location_id    = document.getElementById('et-home-loc').value || null;
   const require_home_location = document.getElementById('et-req-home').checked;
   const require_any_location  = document.getElementById('et-req-any').checked;
 
   if (!name) { _toast('Name required'); return; }
 
-  const payload = { name, category: cat, secure_qr, borrowable,
+  const payload = { name, category: cat, secure_qr, borrowable, is_crate, deployment_destination,
     home_location_id: home_location_id ? +home_location_id : null,
     require_home_location, require_any_location };
 

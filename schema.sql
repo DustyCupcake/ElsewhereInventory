@@ -219,6 +219,8 @@ CREATE TABLE IF NOT EXISTS equipment_types (
     order_deadline       DATETIME     NULL,
     secure_qr            TINYINT(1)   NOT NULL DEFAULT 0,
     borrowable           TINYINT(1)   NOT NULL DEFAULT 0,
+    is_crate             TINYINT(1)   NOT NULL DEFAULT 0,
+    deployment_destination VARCHAR(255) NULL,
     home_location_id     INT UNSIGNED NULL,
     require_home_location TINYINT(1)  NOT NULL DEFAULT 0,
     require_any_location  TINYINT(1)  NOT NULL DEFAULT 0,
@@ -498,6 +500,22 @@ CREATE TABLE IF NOT EXISTS qr_template_zones (
     PRIMARY KEY (id),
     KEY idx_ztpl (template_id),
     CONSTRAINT fk_zone_template FOREIGN KEY (template_id) REFERENCES qr_templates(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ─── Crate manifest ──────────────────────────────────────────────────────────
+-- Stores the current contents list for crate-type equipment items.
+CREATE TABLE IF NOT EXISTS crate_manifest (
+    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    item_id       INT UNSIGNED NOT NULL,
+    content_name  VARCHAR(255) NOT NULL,
+    quantity      SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    notes         VARCHAR(255) NULL,
+    sort_order    SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_crate_manifest_item (item_id),
+    CONSTRAINT fk_crate_manifest_item FOREIGN KEY (item_id)
+        REFERENCES equipment_items(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;
