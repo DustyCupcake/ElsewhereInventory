@@ -62,6 +62,8 @@ $routes = [
     ['POST', '/items/deployments',   'routes/items.php',        'handle_log_deployment'],
     ['POST', '/items/deployment-photo', 'routes/items.php',     'handle_upload_deployment_photo'],
     ['DELETE', '/items/photos/:id',  'routes/items.php',        'handle_delete_item_photo_gallery'],
+    ['GET',  '/items/:id/manifest',  'routes/items.php',        'handle_get_manifest'],
+    ['PUT',  '/items/:id/manifest',  'routes/items.php',        'handle_save_manifest'],
     ['GET',  '/inventory',           'routes/items.php',        'handle_inventory'],
     ['POST', '/checkout',            'routes/transactions.php', 'handle_checkout'],
     ['POST', '/sub-checkout',        'routes/transactions.php', 'handle_sub_checkout'],

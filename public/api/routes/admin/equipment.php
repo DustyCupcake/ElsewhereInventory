@@ -8,7 +8,7 @@ function handle_list_types(): void {
     require_admin();
 
     $rows = db()->query(
-        'SELECT t.id, t.name, t.category, t.secure_qr, t.borrowable,
+        'SELECT t.id, t.name, t.category, t.secure_qr, t.borrowable, t.is_crate, t.deployment_destination,
                 t.home_location_id, t.require_home_location, t.require_any_location,
                 sl.name AS home_location_name,
                 t.created_at,
@@ -43,6 +43,7 @@ function handle_list_types(): void {
         $r['item_count']            = (int)$r['item_count'];
         $r['secure_qr']             = (bool)$r['secure_qr'];
         $r['borrowable']            = (bool)$r['borrowable'];
+        $r['is_crate']              = (bool)$r['is_crate'];
         $r['require_home_location'] = (bool)$r['require_home_location'];
         $r['require_any_location']  = (bool)$r['require_any_location'];
         $r['home_location_id']      = $r['home_location_id'] ? (int)$r['home_location_id'] : null;
@@ -62,6 +63,9 @@ function handle_create_type(): void {
     $category             = trim($b['category'] ?? '');
     $secure_qr            = !empty($b['secure_qr']) ? 1 : 0;
     $borrowable           = !empty($b['borrowable']) ? 1 : 0;
+    $is_crate             = !empty($b['is_crate']) ? 1 : 0;
+    $deployment_destination = isset($b['deployment_destination']) && trim($b['deployment_destination']) !== ''
+        ? trim($b['deployment_destination']) : null;
     $home_location_id     = isset($b['home_location_id']) && $b['home_location_id'] !== '' ? (int)$b['home_location_id'] : null;
     $require_home_location = !empty($b['require_home_location']) ? 1 : 0;
     $require_any_location  = !empty($b['require_any_location']) ? 1 : 0;
@@ -70,10 +74,10 @@ function handle_create_type(): void {
 
     try {
         $stmt = db()->prepare(
-            'INSERT INTO equipment_types (name, category, secure_qr, borrowable, home_location_id, require_home_location, require_any_location)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO equipment_types (name, category, secure_qr, borrowable, is_crate, deployment_destination, home_location_id, require_home_location, require_any_location)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
-        $stmt->execute([$name, $category ?: null, $secure_qr, $borrowable, $home_location_id, $require_home_location, $require_any_location]);
+        $stmt->execute([$name, $category ?: null, $secure_qr, $borrowable, $is_crate, $deployment_destination, $home_location_id, $require_home_location, $require_any_location]);
         $id = (int)db()->lastInsertId();
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) json_error('Name already exists', 409);
@@ -94,6 +98,10 @@ function handle_update_type(): void {
     $category             = trim($b['category'] ?? '');
     $secure_qr            = isset($b['secure_qr']) ? (!empty($b['secure_qr']) ? 1 : 0) : null;
     $borrowable           = isset($b['borrowable']) ? (!empty($b['borrowable']) ? 1 : 0) : null;
+    $is_crate             = isset($b['is_crate'])   ? (!empty($b['is_crate'])   ? 1 : 0) : null;
+    $deployment_destination = array_key_exists('deployment_destination', $b)
+        ? (trim($b['deployment_destination'] ?? '') !== '' ? trim($b['deployment_destination']) : null)
+        : false; // false = not provided
     $home_location_id     = array_key_exists('home_location_id', $b)
         ? ($b['home_location_id'] !== '' && $b['home_location_id'] !== null ? (int)$b['home_location_id'] : null)
         : false; // false = not provided
@@ -105,11 +113,13 @@ function handle_update_type(): void {
     $sets   = ['name = ?', 'category = ?'];
     $params = [$name, $category ?: null];
 
-    if ($secure_qr !== null)            { $sets[] = 'secure_qr = ?';            $params[] = $secure_qr; }
-    if ($borrowable !== null)           { $sets[] = 'borrowable = ?';           $params[] = $borrowable; }
-    if ($home_location_id !== false)    { $sets[] = 'home_location_id = ?';     $params[] = $home_location_id; }
-    if ($require_home_location !== null){ $sets[] = 'require_home_location = ?';$params[] = $require_home_location; }
-    if ($require_any_location !== null) { $sets[] = 'require_any_location = ?'; $params[] = $require_any_location; }
+    if ($secure_qr !== null)                 { $sets[] = 'secure_qr = ?';               $params[] = $secure_qr; }
+    if ($borrowable !== null)                { $sets[] = 'borrowable = ?';              $params[] = $borrowable; }
+    if ($is_crate !== null)                  { $sets[] = 'is_crate = ?';               $params[] = $is_crate; }
+    if ($deployment_destination !== false)   { $sets[] = 'deployment_destination = ?'; $params[] = $deployment_destination; }
+    if ($home_location_id !== false)         { $sets[] = 'home_location_id = ?';        $params[] = $home_location_id; }
+    if ($require_home_location !== null)     { $sets[] = 'require_home_location = ?';  $params[] = $require_home_location; }
+    if ($require_any_location !== null)      { $sets[] = 'require_any_location = ?';   $params[] = $require_any_location; }
 
     $params[] = $id;
 
