@@ -56,8 +56,12 @@ $routes = [
 
     // Staff — inventory & equipment ops
     ['GET',  '/camps',               'routes/camps.php',        'handle_camps'],
-    ['GET',  '/items/lookup',        'routes/items.php',        'handle_lookup'],
+    ['GET',  '/items/lookup',         'routes/items.php',        'handle_lookup'],
     ['POST', '/items/:id/photo',     'routes/items.php',        'handle_upload_item_photo'],
+    ['GET',  '/items/deployments',   'routes/items.php',        'handle_item_deployments'],
+    ['POST', '/items/deployments',   'routes/items.php',        'handle_log_deployment'],
+    ['POST', '/items/deployment-photo', 'routes/items.php',     'handle_upload_deployment_photo'],
+    ['DELETE', '/items/photos/:id',  'routes/items.php',        'handle_delete_item_photo_gallery'],
     ['GET',  '/inventory',           'routes/items.php',        'handle_inventory'],
     ['POST', '/checkout',            'routes/transactions.php', 'handle_checkout'],
     ['POST', '/sub-checkout',        'routes/transactions.php', 'handle_sub_checkout'],
@@ -224,6 +228,10 @@ $routes = [
     ['POST',   '/admin/qr-templates/:id/generate',           'routes/admin/qr_templates.php', 'handle_qrt_generate'],
     ['POST',   '/admin/qr-templates/:id/replace-file',       'routes/admin/qr_templates.php', 'handle_qrt_replace_file'],
     ['POST',   '/admin/qr-templates/:id/duplicate',          'routes/admin/qr_templates.php', 'handle_qrt_duplicate'],
+
+    // Admin — system reset / new event
+    ['POST',   '/admin/system/reset',            'routes/admin/system.php',      'handle_system_reset'],
+    ['GET',    '/admin/system/active-event',     'routes/admin/system.php',      'handle_active_event'],
 
     // Admin — users
     ['GET',    '/admin/users/search',            'routes/admin/users.php',       'handle_search'],
