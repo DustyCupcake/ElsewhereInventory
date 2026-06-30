@@ -14,18 +14,21 @@ const ROLE_PERMISSIONS = [
         'create_invites','manage_orders','submit_orders',
         'label_equipment','manage_shifts',
         'request_fills','fill_truck',
+        'update_item_location',
     ],
     'production_staff' => [
         'checkout_equipment','checkin_equipment',
         'view_inventory','view_barrios','view_artists',
         'validate_vouchers',
         'request_fills',
+        'update_item_location',
     ],
     'dept_admin' => [
         'sub_checkout','sub_checkin',
         'view_dept_inventory',
         'create_invites','submit_orders','label_equipment',
         'manage_dept_users',
+        'update_item_location',
     ],
     'dept_staff' => [
         'view_dept_inventory','submit_orders',
@@ -88,6 +91,7 @@ function _build_auth_return(): array {
         'is_person'          => $_SESSION['is_person'] ?? false,
         'shift_id'           => $_SESSION['shift_id'] ?? null,
         'shift_name'         => $_SESSION['shift_name'] ?? null,
+        'barrio_id'          => $_SESSION['barrio_id'] ?? null,
         'qr_token'           => $_SESSION['qr_token'] ?? null,
     ];
     $_SESSION['_auth_cache'] = $data;

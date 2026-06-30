@@ -54,6 +54,13 @@ function handle_create_fill_request(): void {
         $stmt->execute([$entity_id]);
         if (!$stmt->fetch()) json_error('Barrio not found', 404);
 
+    } elseif (!empty($_SESSION['barrio_id'])) {
+        // Barrio-scoped shift session — use the session's barrio automatically
+        $entity_id = (int)$_SESSION['barrio_id'];
+        $stmt = $pdo->prepare('SELECT id FROM barrios WHERE id = ?');
+        $stmt->execute([$entity_id]);
+        if (!$stmt->fetch()) json_error('Session barrio not found', 404);
+
     } else {
         json_error('entity_id, entity_qr, or cube_qr required');
     }

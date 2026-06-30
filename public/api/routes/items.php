@@ -601,3 +601,52 @@ function handle_delete_item_photo_gallery(): void {
 
     json_ok(['deleted' => true]);
 }
+
+// ─── POST /items/location ─────────────────────────────────────────────────────
+// Update the current GPS position of an item. Writes equipment_items.latitude/longitude
+// AND appends an item_deployments row for history.
+function handle_update_item_location(): void {
+    require_method('POST');
+    $user = require_permission('update_item_location');
+    verify_csrf();
+
+    $b         = body();
+    $qr        = trim($b['qr'] ?? '');
+    $latitude  = isset($b['latitude'])  ? (float)$b['latitude']  : null;
+    $longitude = isset($b['longitude']) ? (float)$b['longitude'] : null;
+
+    if ($qr === '' || $latitude === null || $longitude === null) {
+        json_error('qr, latitude, and longitude required');
+    }
+
+    $stmt = db()->prepare('SELECT id FROM equipment_items WHERE qr_code = ?');
+    $stmt->execute([$qr]);
+    $item = $stmt->fetch();
+    if (!$item) json_error('Item not found', 404);
+
+    $item_id = (int)$item['id'];
+    $db      = db();
+
+    // Update current position on the item
+    $stmt = $db->prepare('UPDATE equipment_items SET latitude = ?, longitude = ? WHERE id = ?');
+    $stmt->execute([$latitude, $longitude, $item_id]);
+
+    // Append to deployment history if there is an active event
+    $stmt = $db->prepare('SELECT id FROM events WHERE is_active = 1 LIMIT 1');
+    $stmt->execute();
+    $event = $stmt->fetch();
+    if ($event) {
+        $stmt = $db->prepare(
+            'INSERT INTO item_deployments (item_id, event_id, latitude, longitude, logged_by, logged_at)
+             VALUES (?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE
+                 latitude  = VALUES(latitude),
+                 longitude = VALUES(longitude),
+                 logged_by = VALUES(logged_by),
+                 logged_at = NOW()'
+        );
+        $stmt->execute([$item_id, (int)$event['id'], $latitude, $longitude, $user['id'] ?? null]);
+    }
+
+    json_ok(['success' => true]);
+}
