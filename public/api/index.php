@@ -57,6 +57,7 @@ $routes = [
     // Staff — inventory & equipment ops
     ['GET',  '/camps',               'routes/camps.php',        'handle_camps'],
     ['GET',  '/items/lookup',         'routes/items.php',        'handle_lookup'],
+    ['POST', '/items/location',       'routes/items.php',        'handle_update_item_location'],
     ['POST', '/items/:id/photo',     'routes/items.php',        'handle_upload_item_photo'],
     ['GET',  '/items/deployments',   'routes/items.php',        'handle_item_deployments'],
     ['POST', '/items/deployments',   'routes/items.php',        'handle_log_deployment'],
@@ -156,6 +157,7 @@ $routes = [
     ['POST',   '/admin/barrios',                 'routes/admin/barrios.php',     'handle_create'],
     ['PUT',    '/admin/barrios',                 'routes/admin/barrios.php',     'handle_update'],
     ['DELETE', '/admin/barrios',                 'routes/admin/barrios.php',     'handle_delete'],
+    ['POST',   '/admin/barrios/import-locations-csv', 'routes/admin/barrios.php', 'handle_import_locations_csv'],
 
     // Admin — shifts
     ['GET',    '/admin/shifts',                  'routes/admin/shifts.php',      'handle_list_shifts'],

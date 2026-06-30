@@ -93,6 +93,30 @@ function renderWithData() {
       No active event — ask a production admin to start one.
     </div>`);
 
+  // Location update card (for users with update_item_location permission)
+  const canUpdateLoc = _user?.permissions?.includes('update_item_location');
+  const locationBlock = canUpdateLoc ? `
+    <div class="it-section" id="it-loc-section">
+      <div class="it-section-title">📍 Update location</div>
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+        <button class="btn" id="it-loc-capture-btn">Capture current GPS</button>
+        <span id="it-loc-status" style="font-size:13px;color:var(--text3)"></span>
+      </div>
+      <button class="btn primary" id="it-loc-save-btn" style="display:none">Save location</button>
+      <div id="it-loc-msg" style="font-size:13px;margin-top:.4rem;color:var(--text3)"></div>
+    </div>` : '';
+
+  // Fill request card (for water cubes with a barrio assignment, when user has request_fills)
+  const isWaterCube = _data.category === 'water_cube';
+  const hasBarrio   = !!_data.current_barrio_id;
+  const canFill     = _user?.permissions?.includes('request_fills');
+  const fillBlock   = isWaterCube && hasBarrio && canFill ? `
+    <div class="it-section" id="it-fill-section">
+      <div class="it-section-title">💧 Water fill</div>
+      <button class="btn primary" id="it-fill-req-btn">Request fill</button>
+      <div id="it-fill-msg" style="font-size:13px;margin-top:.4rem;color:var(--text3)"></div>
+    </div>` : '';
+
   // Deployment history
   const historyBlock = buildHistoryHTML(deployments, genPhotos, i);
 
@@ -112,6 +136,10 @@ function renderWithData() {
     ${logBtnBlock}
 
     <div id="it-log-panel" style="display:none"></div>
+
+    ${locationBlock}
+
+    ${fillBlock}
 
     <div class="it-section">
       <div class="it-section-title">ℹ️</div>
@@ -133,6 +161,82 @@ function renderWithData() {
   document.getElementById('it-log-open-btn')?.addEventListener('click', () => {
     _logPanelOpen = !_logPanelOpen;
     renderLogPanel(activeEvent);
+  });
+
+  // Wire location update
+  let _locCoords = null;
+  document.getElementById('it-loc-capture-btn')?.addEventListener('click', () => {
+    const btn    = document.getElementById('it-loc-capture-btn');
+    const status = document.getElementById('it-loc-status');
+    const saveBtn = document.getElementById('it-loc-save-btn');
+    if (!navigator.geolocation) {
+      if (status) status.textContent = 'Geolocation not supported';
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Locating…'; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        _locCoords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        if (status) status.textContent = `📍 ${_locCoords.latitude.toFixed(5)}, ${_locCoords.longitude.toFixed(5)}`;
+        if (btn) { btn.disabled = false; btn.textContent = 'Update'; }
+        if (saveBtn) saveBtn.style.display = '';
+      },
+      () => {
+        if (status) status.textContent = 'Location unavailable';
+        if (btn) { btn.disabled = false; btn.textContent = 'Capture current GPS'; }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+
+  document.getElementById('it-loc-save-btn')?.addEventListener('click', async () => {
+    if (!_locCoords) return;
+    const saveBtn = document.getElementById('it-loc-save-btn');
+    const msgEl   = document.getElementById('it-loc-msg');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    try {
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const me    = await meRes.json();
+      const csrf  = me.csrf_token ?? '';
+      const res = await fetch('/api/items/location', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ qr, latitude: _locCoords.latitude, longitude: _locCoords.longitude }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Failed');
+      if (msgEl) msgEl.textContent = 'Location saved.';
+    } catch (err) {
+      if (msgEl) msgEl.textContent = 'Error: ' + (err?.message ?? 'unknown');
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save location'; }
+    }
+  });
+
+  // Wire fill request
+  document.getElementById('it-fill-req-btn')?.addEventListener('click', async () => {
+    const btn   = document.getElementById('it-fill-req-btn');
+    const msgEl = document.getElementById('it-fill-msg');
+    if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
+    try {
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const me    = await meRes.json();
+      const csrf  = me.csrf_token ?? '';
+      const res = await fetch('/api/fill-requests', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ cube_qr: qr }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Failed');
+      if (msgEl) msgEl.textContent = 'Fill requested!';
+      if (btn) btn.style.display = 'none';
+    } catch (err) {
+      if (msgEl) msgEl.textContent = 'Error: ' + (err?.message ?? 'unknown');
+      if (btn) { btn.disabled = false; btn.textContent = 'Request fill'; }
+    }
   });
 
   // Wire photo lightbox

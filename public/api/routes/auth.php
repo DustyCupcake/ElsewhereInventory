@@ -278,7 +278,7 @@ function handle_shift_login(): void {
 
     $stmt = db()->prepare(
         'SELECT st.id, st.shift_id,
-                s.name AS shift_name, s.permissions, s.dept_id,
+                s.name AS shift_name, s.permissions, s.dept_id, s.barrio_id,
                 s.active_from, s.active_until
          FROM shift_tokens st
          JOIN shifts s ON s.id = st.shift_id
@@ -299,6 +299,8 @@ function handle_shift_login(): void {
     $perms = json_decode($tok['permissions'], true) ?: [];
     $csrf  = bin2hex(random_bytes(32));
 
+    $barrio_id = $tok['barrio_id'] ? (int)$tok['barrio_id'] : null;
+
     session_regenerate_id(true);
     $_SESSION = [
         'user_id'      => null,
@@ -312,6 +314,7 @@ function handle_shift_login(): void {
         'is_shift'     => true,
         'shift_id'     => (int)$tok['shift_id'],
         'shift_name'   => $tok['shift_name'],
+        'barrio_id'    => $barrio_id,
         'csrf_token'   => $csrf,
     ];
 
@@ -320,6 +323,7 @@ function handle_shift_login(): void {
         'permissions'  => $perms,
         'is_shift'     => true,
         'shift_name'   => $tok['shift_name'],
+        'barrio_id'    => $barrio_id,
         'csrf_token'   => $csrf,
     ]);
 }

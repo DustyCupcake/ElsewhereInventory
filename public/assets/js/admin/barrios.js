@@ -36,6 +36,7 @@ function render(container) {
       <div class="btn-group">
         <button class="btn primary sm" onclick="window._barrios.openAdd()">+ Add barrio</button>
         <button class="btn sm" onclick="window._barrios.openImport()">Import CSV</button>
+        <button class="btn sm" onclick="window._barrios.openImportLocations()">Import locations</button>
       </div>
     </div>
 
@@ -53,6 +54,22 @@ function render(container) {
         <button class="btn primary sm" onclick="window._barrios.runImport()">Import</button>
         <button class="btn sm" onclick="window._barrios.closeImport()">Cancel</button>
       </div>
+    </div>
+
+    <div class="form-card" id="import-locations-form" style="display:none">
+      <h2>Import barrio locations via CSV</h2>
+      <p style="margin:0 0 8px;color:var(--text2);font-size:14px">
+        Required columns: <code>barrio_name</code>, <code>location_name</code>, <code>latitude</code>, <code>longitude</code>.<br>
+        Upserts by barrio + location name. Creates storage location entries linked to each barrio.
+      </p>
+      <div class="field">
+        <input type="file" id="import-locations-file" accept=".csv">
+      </div>
+      <div class="form-actions">
+        <button class="btn primary sm" onclick="window._barrios.runImportLocations()">Import</button>
+        <button class="btn sm" onclick="window._barrios.closeImportLocations()">Cancel</button>
+      </div>
+      <div id="import-locations-result" style="font-size:13px;margin-top:.5rem;color:var(--text2)"></div>
     </div>
 
     <div class="form-card" id="barrio-form" style="display:none">
@@ -109,6 +126,7 @@ function render(container) {
     openAdd, openEdit, save, closeForm,
     remove: removeBarrio,
     openImport, closeImport, runImport,
+    openImportLocations, closeImportLocations, runImportLocations,
     openOrders, closeOrders, saveOrders,
   };
 }
@@ -162,7 +180,7 @@ function renderTable(wrap) {
 // ─── Barrio add/edit form ─────────────────────────────────────────────────────
 
 function openAdd() {
-  closeOrders(); closeImport();
+  closeOrders(); closeImport(); closeImportLocations();
   document.getElementById('barrio-form-title').textContent = 'Add barrio';
   document.getElementById('barrio-id').value   = '';
   document.getElementById('barrio-name').value = '';
@@ -228,7 +246,7 @@ async function removeBarrio(id) {
 // ─── Orders form ──────────────────────────────────────────────────────────────
 
 async function openOrders(id) {
-  closeForm(); closeImport();
+  closeForm(); closeImport(); closeImportLocations();
   const b = _barrios.find(x => x.id === id);
   if (!b) return;
 
@@ -328,7 +346,7 @@ async function saveOrders() {
 // ─── CSV import ───────────────────────────────────────────────────────────────
 
 function openImport() {
-  closeForm(); closeOrders();
+  closeForm(); closeOrders(); closeImportLocations();
   document.getElementById('import-file').value = '';
   document.getElementById('import-form').style.display = '';
 }
@@ -364,6 +382,57 @@ async function runImport() {
     await load();
   } catch (e) {
     _toast('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+  }
+}
+
+// ─── Barrio locations CSV import ──────────────────────────────────────────────
+
+function openImportLocations() {
+  closeForm(); closeImport(); closeOrders();
+  document.getElementById('import-locations-file').value = '';
+  document.getElementById('import-locations-result').textContent = '';
+  document.getElementById('import-locations-form').style.display = '';
+}
+
+function closeImportLocations() {
+  document.getElementById('import-locations-form').style.display = 'none';
+}
+
+async function runImportLocations() {
+  const fileInput = document.getElementById('import-locations-file');
+  const file = fileInput?.files?.[0];
+  if (!file) { _toast('Select a CSV file first'); return; }
+
+  const btn    = document.querySelector('#import-locations-form .btn.primary');
+  const result = document.getElementById('import-locations-result');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing…'; }
+  if (result) result.textContent = '';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch('/api/admin/barrios/import-locations-csv', {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'X-CSRF-Token': getCsrf() },
+      body:        formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Import failed');
+
+    const { created = 0, updated = 0, skipped = 0, errors = [] } = data;
+    const summary = `${created} created, ${updated} updated${skipped ? `, ${skipped} skipped` : ''}`;
+    _toast('Locations imported: ' + summary);
+    if (result) {
+      result.innerHTML = summary + (errors.length
+        ? '<br><span style="color:var(--danger)">' + errors.map(e => esc(e)).join('<br>') + '</span>'
+        : '');
+    }
+  } catch (e) {
+    _toast('Error: ' + e.message);
+  } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
   }
 }

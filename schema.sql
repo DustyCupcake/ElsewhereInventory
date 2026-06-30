@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS shifts (
     id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
     name         VARCHAR(128) NOT NULL,
     dept_id      INT UNSIGNED NULL,
+    barrio_id    INT UNSIGNED NULL,
     permissions  TEXT         NOT NULL,
     active_from  DATETIME     NOT NULL,
     active_until DATETIME     NOT NULL,
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS shifts (
     KEY idx_dept   (dept_id),
     KEY idx_active (active_from, active_until),
     CONSTRAINT fk_shift_dept    FOREIGN KEY (dept_id)    REFERENCES departments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_shift_barrio  FOREIGN KEY (barrio_id)  REFERENCES barrios(id)     ON DELETE SET NULL,
     CONSTRAINT fk_shift_creator FOREIGN KEY (created_by) REFERENCES users(id)       ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -201,6 +203,7 @@ CREATE TABLE IF NOT EXISTS distribution_events (
 -- ─── Storage locations ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS storage_locations (
     id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    barrio_id   INT UNSIGNED NULL,
     name        VARCHAR(128) NOT NULL,
     description TEXT,
     latitude    DECIMAL(10,7) NULL,
@@ -208,7 +211,8 @@ CREATE TABLE IF NOT EXISTS storage_locations (
     qr_code     VARCHAR(64)  NOT NULL,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_loc_qr (qr_code)
+    UNIQUE KEY uq_loc_qr (qr_code),
+    CONSTRAINT fk_loc_barrio FOREIGN KEY (barrio_id) REFERENCES barrios(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Equipment types ──────────────────────────────────────────────────────────

@@ -89,6 +89,8 @@ function handle_sub_checkout(): void {
     $item_qrs   = $b['item_qrs'] ?? [];
     $force      = !empty($b['force']);
     $dept_label = isset($b['dept_label']) ? trim($b['dept_label']) : null;
+    $latitude   = isset($b['latitude'])   ? (float)$b['latitude']  : null;
+    $longitude  = isset($b['longitude'])  ? (float)$b['longitude'] : null;
 
     if (!$dept_id || (!$barrio_id && !$artist_id) || empty($item_qrs) || !is_array($item_qrs)) {
         json_error('dept_id, one of barrio_id/artist_id, and item_qrs required');
@@ -131,9 +133,11 @@ function handle_sub_checkout(): void {
 
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET current_barrio_id = ?, current_artist_id = ?, dept_label = COALESCE(?, dept_label)
+                 SET current_barrio_id = ?, current_artist_id = ?, dept_label = COALESCE(?, dept_label),
+                     latitude  = COALESCE(?, latitude),
+                     longitude = COALESCE(?, longitude)
                  WHERE id = ?'
-            )->execute([$barrio_id, $artist_id, $dept_label ?: null, $item['id']]);
+            )->execute([$barrio_id, $artist_id, $dept_label ?: null, $latitude, $longitude, $item['id']]);
 
             $pdo->prepare(
                 'INSERT INTO transactions (type, item_id, dept_id, barrio_id, artist_id,

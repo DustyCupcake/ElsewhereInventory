@@ -31,6 +31,7 @@ let scanner        = null;
 let deptLabel      = '';
 let _consumableTypes = [];
 let _barrioDetail    = null;
+let capturedLocation = null;  // { latitude, longitude } from GPS capture during sub-checkout
 
 // ─── Mode helpers ──────────────────────────────────────────────────────────────
 
@@ -102,11 +103,12 @@ export function init(container, preselectedId = null) {
 // ─── Step 1: Select entity ─────────────────────────────────────────────────────
 
 function renderStep1(container, preselectedId = null) {
-  step           = 1;
-  selectedEntity = null;
-  scannedItems   = [];
-  deptLabel      = '';
-  _barrioDetail  = null;
+  step             = 1;
+  selectedEntity   = null;
+  scannedItems     = [];
+  deptLabel        = '';
+  _barrioDetail    = null;
+  capturedLocation = null;
   stopScanner();
 
   const modeSelectorHtml = availableModes.length > 1 ? `
@@ -727,10 +729,46 @@ function goStep3() {
       ${hasWarns ? '<div style="font-size:12px;color:var(--warn);margin-top:.75rem;font-style:italic">Items already lent will be force-transferred</div>' : ''}
       ${arrivalForm}
     </div>
+    ${isSubMode() ? `<div id="co-location-row" style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+      <button class="btn btn-sm btn-outline" id="co-loc-btn">📍 Capture location</button>
+      <span id="co-loc-status" style="font-size:13px;color:var(--text3)">Optional</span>
+    </div>` : ''}
     <button class="btn primary" id="co-confirm" onclick="window._co.confirm()">${__('reviewLend')}</button>
     <button class="btn ghost" onclick="window._co.back()">${_c('back')}</button>
   `;
   window._co = { back: goStep2, confirm: finalise };
+
+  if (isSubMode()) {
+    document.getElementById('co-loc-btn')?.addEventListener('click', captureCheckoutLocation);
+  }
+}
+
+// ─── Location capture ──────────────────────────────────────────────────────────
+
+function isSubMode() {
+  return mode === 'sub_barrio' || mode === 'sub_artist';
+}
+
+function captureCheckoutLocation() {
+  const btn    = document.getElementById('co-loc-btn');
+  const status = document.getElementById('co-loc-status');
+  if (!navigator.geolocation) {
+    if (status) status.textContent = 'Geolocation not supported';
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Locating…'; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      capturedLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      if (status) status.textContent = `📍 ${capturedLocation.latitude.toFixed(5)}, ${capturedLocation.longitude.toFixed(5)}`;
+      if (btn) { btn.disabled = false; btn.textContent = '📍 Update'; }
+    },
+    () => {
+      if (status) status.textContent = 'Location unavailable';
+      if (btn) { btn.disabled = false; btn.textContent = '📍 Capture location'; }
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
 }
 
 // ─── Finalise ──────────────────────────────────────────────────────────────────
@@ -763,6 +801,10 @@ async function finalise() {
       const payload = { dept_id: deptId, item_qrs: itemQrs, dept_label: label, force: true };
       if (mode === 'sub_barrio') payload.barrio_id = selectedEntity.id;
       else                       payload.artist_id = selectedEntity.id;
+      if (capturedLocation) {
+        payload.latitude  = capturedLocation.latitude;
+        payload.longitude = capturedLocation.longitude;
+      }
       result = await post('/sub-checkout', payload);
     }
 
