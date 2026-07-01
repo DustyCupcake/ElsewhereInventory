@@ -547,6 +547,15 @@ async function handleItemScan(qr) {
       });
       return;
     }
+    if (url.pathname === '/shift' && url.searchParams.has('token')) {
+      scanOverlay.show({
+        state: 'warning',
+        title: 'Shift QR detected',
+        subtitle: "This is a volunteer shift login code — scan it with your phone's camera app, not here",
+        buttons: [{ label: _c('ok'), action: () => { scanOverlay.hide(); restartItemScanner(); } }],
+      });
+      return;
+    }
   } catch { /* not a URL */ }
 
   if (stat) stat.textContent = 'Looking up…';
