@@ -60,10 +60,9 @@ function handle_create_shift(): void {
         json_error('name, permissions, active_from, active_until required');
     }
 
-    $valid_perms = array_keys(array_flip(array_merge(...array_values(ROLE_PERMISSIONS))));
     foreach ($permissions as $p) {
-        if (!in_array($p, $valid_perms, true)) {
-            json_error("Unknown permission: $p");
+        if (!in_array($p, $user['permissions'], true)) {
+            json_error("Cannot grant a permission you don't have: $p");
         }
     }
 
@@ -102,8 +101,20 @@ function handle_update_shift(): void {
         }
     }
     if (isset($b['permissions']) && is_array($b['permissions'])) {
+        $cur_stmt = db()->prepare('SELECT permissions FROM shifts WHERE id = ?');
+        $cur_stmt->execute([$id]);
+        $cur_row       = $cur_stmt->fetch();
+        $current_perms = $cur_row ? (json_decode($cur_row['permissions'], true) ?: []) : [];
+
+        // Only newly-added permissions need to be ones the editor actually holds —
+        // permissions already on the shift (e.g. granted by a higher-privileged admin) may persist.
+        foreach (array_diff($b['permissions'], $current_perms) as $p) {
+            if (!in_array($p, $user['permissions'], true)) {
+                json_error("Cannot grant a permission you don't have: $p");
+            }
+        }
         $sets[]   = 'permissions = ?';
-        $params[] = json_encode($b['permissions']);
+        $params[] = json_encode(array_values($b['permissions']));
     }
     if (isset($b['dept_id'])) {
         $sets[]   = 'dept_id = ?';

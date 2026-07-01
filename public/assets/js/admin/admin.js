@@ -125,7 +125,7 @@ function navigate(section) {
     case 'equipment':          initEquipment(content, toast);           break;
     case 'users':              initUsers(content, toast, _user);        break;
     case 'teams':              initTeams(content, toast);               break;
-    case 'shifts':             initShifts(content, toast);              break;
+    case 'shifts':             initShifts(content, toast, _user);       break;
     case 'consumables':        initConsumables(content, toast);         break;
     case 'orders':             initOrders(content, toast);              break;
     case 'storage-locations':  initStorageLocations(content, toast);    break;
