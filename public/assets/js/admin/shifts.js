@@ -4,7 +4,7 @@
  * generate QR login tokens, print the token QR sheet.
  */
 
-import { get, post, put, del } from '../api.js?v=1.0.0';
+import { get, post, put, del } from '../api.js?v=1.0.1';
 
 const PERMISSION_OPTIONS = [
   'checkout_equipment', 'checkin_equipment',
