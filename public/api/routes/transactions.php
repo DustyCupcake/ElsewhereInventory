@@ -92,12 +92,19 @@ function handle_sub_checkout(): void {
     $latitude   = isset($b['latitude'])   ? (float)$b['latitude']  : null;
     $longitude  = isset($b['longitude'])  ? (float)$b['longitude'] : null;
 
-    if (!$dept_id || (!$barrio_id && !$artist_id) || empty($item_qrs) || !is_array($item_qrs)) {
-        json_error('dept_id, one of barrio_id/artist_id, and item_qrs required');
+    // dept_id is optional for production-level users who can checkout across all depts;
+    // it will be derived from the item's current_dept_id in the per-item loop below.
+    $auto_dept = !$dept_id && has_permission('checkout_equipment');
+
+    if (!$dept_id && !$auto_dept) {
+        json_error('dept_id required');
+    }
+    if ((!$barrio_id && !$artist_id) || empty($item_qrs) || !is_array($item_qrs)) {
+        json_error('one of barrio_id/artist_id, and item_qrs required');
     }
 
-    // Verify dept access
-    if (!has_permission('checkout_equipment')) {
+    // Verify dept access for non-production users
+    if (!$auto_dept && !has_permission('checkout_equipment')) {
         require_dept_access($dept_id);
     }
 
@@ -121,7 +128,10 @@ function handle_sub_checkout(): void {
                 continue;
             }
 
-            if ((int)$item['current_dept_id'] !== $dept_id) {
+            // For production admins with no dept_id specified, use the item's current dept
+            $effective_dept_id = $auto_dept ? (int)$item['current_dept_id'] : $dept_id;
+
+            if (!$effective_dept_id || (int)$item['current_dept_id'] !== $effective_dept_id) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_in_dept'];
                 continue;
             }
@@ -144,7 +154,7 @@ function handle_sub_checkout(): void {
                                            performed_by, user_name_cache, occurred_at)
                  VALUES ("sub_checkout", ?, ?, ?, ?, ?, ?, ?)'
             )->execute([
-                $item['id'], $dept_id, $barrio_id, $artist_id,
+                $item['id'], $effective_dept_id, $barrio_id, $artist_id,
                 $user['id'], $user['display_name'], $now,
             ]);
 
