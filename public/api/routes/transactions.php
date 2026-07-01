@@ -92,19 +92,19 @@ function handle_sub_checkout(): void {
     $latitude   = isset($b['latitude'])   ? (float)$b['latitude']  : null;
     $longitude  = isset($b['longitude'])  ? (float)$b['longitude'] : null;
 
-    // dept_id is optional for production-level users who can checkout across all depts;
-    // it will be derived from the item's current_dept_id in the per-item loop below.
-    $auto_dept = !$dept_id && has_permission('checkout_equipment');
+    // Production-level users (checkout_equipment) can sub-checkout from any dept;
+    // use the item's current_dept_id rather than requiring a specific dept_id.
+    $production = has_permission('checkout_equipment');
 
-    if (!$dept_id && !$auto_dept) {
+    if (!$dept_id && !$production) {
         json_error('dept_id required');
     }
     if ((!$barrio_id && !$artist_id) || empty($item_qrs) || !is_array($item_qrs)) {
         json_error('one of barrio_id/artist_id, and item_qrs required');
     }
 
-    // Verify dept access for non-production users
-    if (!$auto_dept && !has_permission('checkout_equipment')) {
+    // Verify dept access for dept-scoped users
+    if (!$production) {
         require_dept_access($dept_id);
     }
 
@@ -128,8 +128,8 @@ function handle_sub_checkout(): void {
                 continue;
             }
 
-            // For production admins with no dept_id specified, use the item's current dept
-            $effective_dept_id = $auto_dept ? (int)$item['current_dept_id'] : $dept_id;
+            // Production users can lend from any dept; derive dept from the item itself
+            $effective_dept_id = $production ? (int)$item['current_dept_id'] : $dept_id;
 
             if (!$effective_dept_id || (int)$item['current_dept_id'] !== $effective_dept_id) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_in_dept'];
