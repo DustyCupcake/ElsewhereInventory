@@ -485,10 +485,6 @@ function handle_sub_person_checkout(): void {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_found'];
                 continue;
             }
-            if ((int)$item['current_dept_id'] !== $dept_id) {
-                $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_in_dept'];
-                continue;
-            }
             if (($item['current_barrio_id'] || $item['current_artist_id'] || $item['current_person_id']) && !$force) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'already_sub_lent'];
                 continue;
@@ -522,10 +518,11 @@ function handle_sub_person_checkout(): void {
 
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET current_person_id = ?, dept_label = COALESCE(?, dept_label),
+                 SET current_dept_id = COALESCE(current_dept_id, ?),
+                     current_person_id = ?, dept_label = COALESCE(?, dept_label),
                      current_barrio_id = NULL, current_artist_id = NULL
                  WHERE id = ?'
-            )->execute([(int)$person['id'], $dept_label ?: null, $item['id']]);
+            )->execute([$dept_id ?: null, (int)$person['id'], $dept_label ?: null, $item['id']]);
 
             $pdo->prepare(
                 'INSERT INTO transactions (type, item_id, dept_id, person_id, performed_by, user_name_cache, occurred_at)
