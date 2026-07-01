@@ -24,9 +24,16 @@ function handle_create(): void {
 
     $qr_code = bin2hex(random_bytes(12));
 
+    // Assign to the department that manages barrios, so dept-scoped staff
+    // (permission view_barrios without production-level view_inventory) can see it.
+    $dept_stmt = db()->prepare("SELECT id FROM departments WHERE sub_entity = 'barrio' ORDER BY id LIMIT 1");
+    $dept_stmt->execute();
+    $dept_id = $dept_stmt->fetchColumn();
+    $dept_id = $dept_id !== false ? (int)$dept_id : null;
+
     try {
-        $stmt = db()->prepare('INSERT INTO barrios (name, qr_code, sort_order) VALUES (?, ?, ?)');
-        $stmt->execute([$name, $qr_code, $sort]);
+        $stmt = db()->prepare('INSERT INTO barrios (name, qr_code, sort_order, dept_id) VALUES (?, ?, ?, ?)');
+        $stmt->execute([$name, $qr_code, $sort, $dept_id]);
         $id = (int)db()->lastInsertId();
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) json_error('Name already exists', 409);

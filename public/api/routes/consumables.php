@@ -217,6 +217,13 @@ function handle_import_csv(): void {
     if ($name_col === false) { fclose($fh); json_error('CSV must have a "name" column', 400); }
     $sort_col = array_search('sort_order', $headers, true);
 
+    // Assign new barrios to the department that manages barrios, so dept-scoped staff
+    // (permission view_barrios without production-level view_inventory) can see them.
+    $dept_stmt = db()->prepare("SELECT id FROM departments WHERE sub_entity = 'barrio' ORDER BY id LIMIT 1");
+    $dept_stmt->execute();
+    $barrio_dept_id = $dept_stmt->fetchColumn();
+    $barrio_dept_id = $barrio_dept_id !== false ? (int)$barrio_dept_id : null;
+
     $created = 0; $updated = 0; $skipped = 0;
 
     while (($row = fgetcsv($fh)) !== false) {
@@ -235,8 +242,8 @@ function handle_import_csv(): void {
             $updated++;
         } else {
             try {
-                $ins = db()->prepare('INSERT INTO barrios (name, sort_order) VALUES (?,?)');
-                $ins->execute([$name, $sort]);
+                $ins = db()->prepare('INSERT INTO barrios (name, sort_order, dept_id) VALUES (?,?,?)');
+                $ins->execute([$name, $sort, $barrio_dept_id]);
                 $barrio_id = (int)db()->lastInsertId();
                 $created++;
             } catch (\PDOException $e) {

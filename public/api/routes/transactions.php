@@ -135,7 +135,8 @@ function handle_sub_checkout(): void {
 
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET current_dept_id = COALESCE(current_dept_id, ?),
+                 SET status = "checked-out",
+                     current_dept_id = COALESCE(current_dept_id, ?),
                      current_barrio_id = ?, current_artist_id = ?, dept_label = COALESCE(?, dept_label),
                      latitude  = COALESCE(?, latitude),
                      longitude = COALESCE(?, longitude)
@@ -518,7 +519,8 @@ function handle_sub_person_checkout(): void {
 
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET current_dept_id = COALESCE(current_dept_id, ?),
+                 SET status = "checked-out",
+                     current_dept_id = COALESCE(current_dept_id, ?),
                      current_person_id = ?, dept_label = COALESCE(?, dept_label),
                      current_barrio_id = NULL, current_artist_id = NULL
                  WHERE id = ?'
