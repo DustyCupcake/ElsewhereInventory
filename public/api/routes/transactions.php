@@ -147,7 +147,7 @@ function handle_sub_checkout(): void {
                                            performed_by, user_name_cache, occurred_at)
                  VALUES ("sub_checkout", ?, ?, ?, ?, ?, ?, ?)'
             )->execute([
-                $item['id'], $effective_dept_id, $barrio_id, $artist_id,
+                $item['id'], $effective_dept_id ?: null, $barrio_id, $artist_id,
                 $user['id'], $user['display_name'], $now,
             ]);
 
