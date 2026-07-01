@@ -238,6 +238,21 @@ function renderEntitySelect(container) {
   });
 }
 
+let _barriosCache = null;
+
+async function loadBarriosCache() {
+  if (_barriosCache) return _barriosCache;
+  try {
+    const data = await get('/camps');
+    _barriosCache = data.camps || [];
+    try { localStorage.setItem('barrio_camps', JSON.stringify(_barriosCache)); } catch {}
+  } catch {
+    try { _barriosCache = JSON.parse(localStorage.getItem('barrio_camps') || '[]'); }
+    catch { _barriosCache = []; }
+  }
+  return _barriosCache;
+}
+
 async function searchEntities(q) {
   const results = document.getElementById('entity-results');
   if (!results) return;
@@ -248,7 +263,7 @@ async function searchEntities(q) {
   try {
     if (perms.includes('sub_checkout') || perms.includes('checkout_equipment')) {
       // Search barrios
-      const barrios = JSON.parse(localStorage.getItem('barrio_camps') || '[]');
+      const barrios = await loadBarriosCache();
       barrios.filter(b => b.name.toLowerCase().includes(q.toLowerCase())).slice(0, 5).forEach(b => {
         matches.push({ type: 'barrio', id: b.id, name: b.name });
       });
