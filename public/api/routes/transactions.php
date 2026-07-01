@@ -92,8 +92,6 @@ function handle_sub_checkout(): void {
     $latitude   = isset($b['latitude'])   ? (float)$b['latitude']  : null;
     $longitude  = isset($b['longitude'])  ? (float)$b['longitude'] : null;
 
-    // Production-level users (checkout_equipment) can sub-checkout from any dept;
-    // use the item's current_dept_id rather than requiring a specific dept_id.
     $production = has_permission('checkout_equipment');
 
     if (!$dept_id && !$production) {
@@ -103,7 +101,6 @@ function handle_sub_checkout(): void {
         json_error('one of barrio_id/artist_id, and item_qrs required');
     }
 
-    // Verify dept access for dept-scoped users
     if (!$production) {
         require_dept_access($dept_id);
     }
@@ -128,13 +125,8 @@ function handle_sub_checkout(): void {
                 continue;
             }
 
-            // Production users can lend from any dept; derive dept from the item itself
-            $effective_dept_id = $production ? (int)$item['current_dept_id'] : $dept_id;
-
-            if (!$effective_dept_id || (int)$item['current_dept_id'] !== $effective_dept_id) {
-                $results[] = ['qr' => $qr, 'success' => false, 'error' => 'not_in_dept'];
-                continue;
-            }
+            // Use item's current dept if already assigned, otherwise use the user's dept
+            $effective_dept_id = (int)$item['current_dept_id'] ?: $dept_id;
 
             if (($item['current_barrio_id'] || $item['current_artist_id']) && !$force) {
                 $results[] = ['qr' => $qr, 'success' => false, 'error' => 'already_sub_lent'];
@@ -143,11 +135,12 @@ function handle_sub_checkout(): void {
 
             $pdo->prepare(
                 'UPDATE equipment_items
-                 SET current_barrio_id = ?, current_artist_id = ?, dept_label = COALESCE(?, dept_label),
+                 SET current_dept_id = COALESCE(current_dept_id, ?),
+                     current_barrio_id = ?, current_artist_id = ?, dept_label = COALESCE(?, dept_label),
                      latitude  = COALESCE(?, latitude),
                      longitude = COALESCE(?, longitude)
                  WHERE id = ?'
-            )->execute([$barrio_id, $artist_id, $dept_label ?: null, $latitude, $longitude, $item['id']]);
+            )->execute([$effective_dept_id ?: null, $barrio_id, $artist_id, $dept_label ?: null, $latitude, $longitude, $item['id']]);
 
             $pdo->prepare(
                 'INSERT INTO transactions (type, item_id, dept_id, barrio_id, artist_id,
