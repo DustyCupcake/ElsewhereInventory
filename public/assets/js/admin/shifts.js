@@ -21,12 +21,14 @@ let _toast    = null;
 let _shifts   = [];
 let _depts    = [];
 let _barrios  = [];
+let _ownPerms = new Set();
 let _expandedShiftId = null;
 let _tokensCache     = {};
 
-export async function initShifts(container, toast) {
+export async function initShifts(container, toast, user) {
   _toast = toast;
   _shifts = [];
+  _ownPerms = new Set(user?.permissions || []);
   _expandedShiftId = null;
   _tokensCache = {};
   renderShell(container);
@@ -133,6 +135,10 @@ function renderForm(shift) {
     `<option value="${b.id}" ${shift?.barrio_id === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
 
   const selectedPerms = new Set(shift?.permissions || []);
+  const editablePerms = PERMISSION_OPTIONS.filter(p => _ownPerms.has(p));
+  // Permissions already on the shift that this admin can't grant themselves (e.g. set by a
+  // higher-privileged admin) — kept out of the checkbox list but preserved on save.
+  const lockedPerms = (shift?.permissions || []).filter(p => !_ownPerms.has(p));
 
   area.innerHTML = `
     <div class="form-card" style="margin-bottom:1rem">
@@ -161,22 +167,27 @@ function renderForm(shift) {
       <div class="form-row">
         <div class="field">
           <label>Active from</label>
-          <input type="datetime-local" id="sf-from" value="${toLocalInput(shift?.active_from)}">
+          <input type="datetime-local" id="sf-from" value="${toLocalInput(shift?.active_from) || nowLocalInput()}">
         </div>
         <div class="field">
           <label>Active until</label>
-          <input type="datetime-local" id="sf-until" value="${toLocalInput(shift?.active_until)}">
+          <input type="datetime-local" id="sf-until" value="${toLocalInput(shift?.active_until) || nowLocalInput()}">
         </div>
       </div>
       <div class="field">
-        <label>Permissions</label>
+        <label>Permissions <span style="color:var(--text3);font-weight:400">(only permissions you hold can be granted)</span></label>
+        <input type="hidden" id="sf-locked-perms" value="${esc(lockedPerms.join(','))}">
         <div style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-top:.3rem">
-          ${PERMISSION_OPTIONS.map(p => `
+          ${editablePerms.map(p => `
             <label style="display:flex;align-items:center;gap:.3rem;font-size:13px;font-weight:400">
               <input type="checkbox" class="sf-perm" value="${p}" ${selectedPerms.has(p) ? 'checked' : ''}>
               ${p}
             </label>`).join('')}
         </div>
+        ${lockedPerms.length ? `
+          <div style="font-size:12px;color:var(--text3);margin-top:.5rem">
+            Also granted by a higher-privileged admin (unchanged by you): ${lockedPerms.map(esc).join(', ')}
+          </div>` : ''}
       </div>
       <div class="form-actions">
         <button class="btn primary sm" onclick="window._shifts.saveShift()">
@@ -196,7 +207,13 @@ async function saveShift() {
   const barrioId = document.getElementById('sf-barrio').value;
   const from     = document.getElementById('sf-from').value;
   const until    = document.getElementById('sf-until').value;
-  const perms    = Array.from(document.querySelectorAll('.sf-perm:checked')).map(el => el.value);
+  const lockedPerms = (document.getElementById('sf-locked-perms').value || '').split(',').filter(Boolean);
+  const perms = [
+    ...new Set([
+      ...Array.from(document.querySelectorAll('.sf-perm:checked')).map(el => el.value),
+      ...lockedPerms,
+    ]),
+  ];
 
   if (!name)  { _toast('Name required'); return; }
   if (!from || !until) { _toast('Active window required'); return; }
@@ -361,6 +378,12 @@ function closePanel() {
 function toLocalInput(iso) {
   if (!iso) return '';
   return iso.slice(0, 16).replace(' ', 'T');
+}
+
+function nowLocalInput() {
+  const d      = new Date();
+  const offset = d.getTimezoneOffset();
+  return new Date(d.getTime() - offset * 60000).toISOString().slice(0, 16);
 }
 
 function fmtWindow(from, until) {
