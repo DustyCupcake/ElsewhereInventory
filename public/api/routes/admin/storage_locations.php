@@ -127,7 +127,7 @@ function handle_location_qr_sheet(): void {
 
         if ($use_lib) {
             ob_start();
-            QRcode::png($scan_url, false, QR_ECLEVEL_M, 6, 1);
+            QRcode::png($scan_url, false, QR_ECLEVEL_H, 6, 1);
             $png = ob_get_clean();
             $src = 'data:image/png;base64,' . base64_encode($png);
         } else {

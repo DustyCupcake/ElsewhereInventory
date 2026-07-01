@@ -33,7 +33,7 @@ function handle_barrio_qr(): void {
     if ($use_lib) {
         require_once __DIR__ . '/../../../assets/vendor/phpqrcode/qrlib.php';
         ob_start();
-        QRcode::png($deep_link, false, QR_ECLEVEL_M, 10, 2);
+        QRcode::png($deep_link, false, QR_ECLEVEL_H, 10, 2);
         $png = ob_get_clean();
         $src = 'data:image/png;base64,' . base64_encode($png);
     } else {

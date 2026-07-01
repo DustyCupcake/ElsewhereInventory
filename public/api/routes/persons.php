@@ -44,7 +44,7 @@ function handle_person_info(): void {
 // $fg_hex / $bg_hex are 6-char hex strings without '#' (e.g. "1a1a18").
 function qr_generate_svg(string $data, string $fg_hex = '1a1a18', string $bg_hex = 'ffffff'): string {
     // Returns array of strings, one per row; each char is '0' (light) or '1' (dark)
-    $frame  = QRencode::factory(QR_ECLEVEL_M)->encode($data);
+    $frame  = QRencode::factory(QR_ECLEVEL_H)->encode($data);
     $size   = count($frame);
     $margin = 4; // quiet-zone in modules
     $total  = $size + $margin * 2;
@@ -123,7 +123,7 @@ function handle_my_qr(): void {
     if ($use_lib) {
         require_once __DIR__ . '/../../assets/vendor/phpqrcode/qrlib.php';
         ob_start();
-        QRcode::png($scan_url, false, QR_ECLEVEL_M, 10, 2);
+        QRcode::png($scan_url, false, QR_ECLEVEL_H, 10, 2);
         $png = ob_get_clean();
         $src = 'data:image/png;base64,' . base64_encode($png);
     } else {

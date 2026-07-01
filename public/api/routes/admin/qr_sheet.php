@@ -50,7 +50,7 @@ function handle_qr_sheet(): void {
 
         if ($use_lib) {
             ob_start();
-            QRcode::png($qr_url, false, QR_ECLEVEL_M, 6, 2);
+            QRcode::png($qr_url, false, QR_ECLEVEL_H, 6, 2);
             $png = ob_get_clean();
             $src = 'data:image/png;base64,' . base64_encode($png);
         } else {

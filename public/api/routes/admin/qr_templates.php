@@ -500,7 +500,7 @@ function _qrt_draw_zone(FPDI $pdf, array $zone, array $item, string $base_url,
             $qr_url = $base_url . '/scan?qr=' . rawurlencode($item['qr_code']);
             $tmp    = tempnam(sys_get_temp_dir(), 'qrt_') . '.png';
             if ($has_qrlib) {
-                QRcode::png($qr_url, $tmp, QR_ECLEVEL_M, 10, 2);
+                QRcode::png($qr_url, $tmp, QR_ECLEVEL_H, 10, 2);
             } else {
                 $data = @file_get_contents(
                     'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' . urlencode($qr_url)
