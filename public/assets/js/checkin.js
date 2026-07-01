@@ -127,6 +127,20 @@ async function handleScan(qr, container) {
     render(container);
   };
 
+  // Detect shift QR scanned into the equipment scanner — warn and ignore
+  try {
+    const url = new URL(qr);
+    if (url.pathname === '/shift' && url.searchParams.has('token')) {
+      scanOverlay.show({
+        state: 'warning',
+        title: 'Shift QR detected',
+        subtitle: "This is a volunteer shift login code — scan it with your phone's camera app, not here",
+        buttons: [{ label: _c('ok'), action: doReset }],
+      });
+      return;
+    }
+  } catch { /* not a URL */ }
+
   // Build the action that triggers the actual checkin POST
   const doConfirmReturn = async (itemQr) => {
     scanOverlay.hide();

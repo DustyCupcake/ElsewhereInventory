@@ -8,6 +8,11 @@ require_once __DIR__ . '/lib/db.php';
 require_once __DIR__ . '/lib/response.php';
 require_once __DIR__ . '/auth.php';
 
+// Naive DATETIME columns (shift windows, invite/token expiry, order deadlines) are entered
+// and displayed as local wall-clock time — strtotime()/time() must agree on what "local" means.
+$env = parse_ini_file(__DIR__ . '/../../.env') ?: [];
+date_default_timezone_set($env['APP_TIMEZONE'] ?? 'UTC');
+
 header('Content-Type: application/json; charset=utf-8');
 
 set_exception_handler(function (Throwable $e): void {

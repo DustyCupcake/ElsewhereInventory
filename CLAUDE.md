@@ -78,7 +78,7 @@ elsewhere_inventory/
 ├── schema.sql                        # Complete DB schema for fresh installs
 ├── migrate_*.sql                     # Incremental migrations for upgrades
 ├── setup.php                         # One-time first-admin creation (delete after use)
-├── .env / .env.example               # Runtime config (DB credentials, SETUP_TOKEN)
+├── .env / .env.example               # Runtime config (DB credentials, SETUP_TOKEN, APP_TIMEZONE)
 └── .htaccess                         # Root: denies .env, .sql, .md, .json access
 ```
 
@@ -172,7 +172,7 @@ No build step. All JS is vanilla ES modules loaded by the browser. Cache-busting
 
 ```bash
 # 1. Configure .env
-cp .env.example .env && nano .env   # set DB_HOST, DB_NAME, DB_USER, DB_PASS, SETUP_TOKEN
+cp .env.example .env && nano .env   # set DB_HOST, DB_NAME, DB_USER, DB_PASS, SETUP_TOKEN, APP_TIMEZONE
 
 # 2. Import schema
 mysql -u user -p else_inventory < schema.sql
