@@ -9,6 +9,7 @@ import { initArtists }           from './artists.js?v=1.0.0';
 import { initEquipment }         from './equipment.js?v=1.0.2';
 import { initUsers }             from './users.js?v=1.1.0';
 import { initTeams }             from './teams.js?v=1.1.0';
+import { initShifts }            from './shifts.js?v=1.0.0';
 import { initConsumables }       from './consumables.js?v=1.0.0';
 import { initOrders }            from './orders.js?v=1.0.0';
 import { initStorageLocations }  from './storage_locations.js?v=1.0.0';
@@ -28,6 +29,7 @@ const SECTION_PERMS = {
   equipment:          ['manage_equipment'],
   users:              ['manage_users', 'manage_dept_users'],
   teams:              ['manage_departments'],
+  shifts:             ['manage_shifts'],
   consumables:        ['manage_consumables'],
   orders:             ['manage_orders'],
   'storage-locations': ['manage_equipment'],
@@ -123,6 +125,7 @@ function navigate(section) {
     case 'equipment':          initEquipment(content, toast);           break;
     case 'users':              initUsers(content, toast, _user);        break;
     case 'teams':              initTeams(content, toast);               break;
+    case 'shifts':             initShifts(content, toast);              break;
     case 'consumables':        initConsumables(content, toast);         break;
     case 'orders':             initOrders(content, toast);              break;
     case 'storage-locations':  initStorageLocations(content, toast);    break;
