@@ -792,12 +792,12 @@ async function finalise() {
       result = await post('/person-checkout', { person_qr: selectedEntity.qr_token, item_qrs: itemQrs, dept_label: label, force: true });
 
     } else if (mode === 'sub_person') {
-      const deptId = (user?.dept_ids || [])[0];
+      const deptId = (user?.dept_ids || [])[0] ?? null;
       result = await post('/sub-person-checkout', { dept_id: deptId, person_qr: selectedEntity.qr_token, item_qrs: itemQrs, dept_label: label, force: true });
 
     } else {
       // sub_barrio or sub_artist
-      const deptId = (user?.dept_ids || [])[0];
+      const deptId = (user?.dept_ids || [])[0] ?? null;
       const payload = { dept_id: deptId, item_qrs: itemQrs, dept_label: label, force: true };
       if (mode === 'sub_barrio') payload.barrio_id = selectedEntity.id;
       else                       payload.artist_id = selectedEntity.id;

@@ -711,10 +711,10 @@ async function submitCheckout() {
       body = { dept_id: entity.id, item_qrs };
     } else if (entity.type === 'barrio') {
       endpoint = '/sub-checkout';
-      body = { barrio_id: entity.id, item_qrs };
+      body = { dept_id: _user?.dept_ids?.[0] ?? null, barrio_id: entity.id, item_qrs };
     } else if (entity.type === 'artist') {
       endpoint = '/sub-checkout';
-      body = { artist_id: entity.id, item_qrs };
+      body = { dept_id: _user?.dept_ids?.[0] ?? null, artist_id: entity.id, item_qrs };
     }
 
     const result = await post(endpoint, body);
